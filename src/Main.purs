@@ -7,8 +7,7 @@ import Effect.Class.Console (log, logShow)
 import Effect.Aff (launchAff_)
 import Effect.Aff
 import Data.Argonaut.Decode (decodeJson, (.:?))
-import Data.Argonaut.Decode.Error (JsonDecodeError)
-import Data.Argonaut.Decode.Error (printJsonDecodeError)
+import Data.Argonaut.Decode.Error (JsonDecodeError, printJsonDecodeError)
 import Data.Argonaut.Core (jsonEmptyObject, stringify)
 import Data.Argonaut.Parser (jsonParser)
 import Effect.Class.Console (log)
@@ -19,7 +18,6 @@ import Web.HTML.HTMLDocument (toDocument)
 import Web.Event.Event (defaultPrevented, preventDefault)
 import Web.Event.EventTarget (addEventListener)
 import Web.Event.Internal.Types (Event)
--- import Web.Event.Internal.Types (QuerySelector(..))
 import Web.DOM.Element (Element)
 import Web.DOM.Element (toParentNode)
 import Web.HTML.HTMLInputElement (fromElement, value)
@@ -31,7 +29,7 @@ import Affjax.ResponseFormat (json)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Form (render, form)
-import Data.Map.Internal 
+import Data.Map.Internal
 import Web.HTML.HTMLDocument (fromDocument, body)
 
 foreign import setHTML :: String -> Effect Unit
