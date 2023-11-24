@@ -24,7 +24,12 @@
                     console
                     effect
                     prelude
+                    aff
+                    argonaut-core
+                    argonaut-codecs
                     arrays
+                    web-events
+                    web-html
                   ];
 
                 dir = ./.;
