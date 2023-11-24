@@ -16,9 +16,9 @@ import Web.Event.Internal.Types (Event)
 import Web.DOM.Element (Element)
 import Web.HTML.HTMLInputElement (fromElement, value)
 import Web.DOM.Document
--- import Web.HTML.Window
 import Web.DOM.ParentNode (querySelector)
 import Affjax.Web (get)
+-- import Web.HTML.Window
 -- import Network.HTTP.Affjax.Web (Response)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(Just, Nothing), maybe)
@@ -52,7 +52,7 @@ getInputValue Nothing = pure ""
 
 loadAndFilterPlayers :: String -> Effect Unit
 loadAndFilterPlayers position = do
-  response <- get "path/to/your/appData/rosters/activePlayers.json"
+  response <- get "./appData/rosters/activePlayers.json"
   case response of
     Left error -> log $ "Error loading JSON: " <> show error
     Right res -> case decodeJson res.body of

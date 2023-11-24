@@ -4,8 +4,6 @@ import Prelude
 import Data.Array (foldl)
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 
--- import Data.Semigroup ((<>))
-
 type InputType = String
 type Label = String
 type Method = String
