@@ -3,7 +3,8 @@ module Form (WidgetNode, render, form) where
 import Prelude
 import Data.Array (foldl)
 import Data.Maybe (Maybe(Just, Nothing), maybe)
-import Data.Semigroup ((<>))
+
+-- import Data.Semigroup ((<>))
 
 type InputType = String
 type Label = String
@@ -46,9 +47,17 @@ renderElement el ct =
     tag' = tag ct
   in
     case el of
-      (Form mt act) -> tag' "form" $ [ Attr "method" mt, Attr "action" act ]
-      (Input t n "") -> tag' "input" $ [ Attr "type" t ] <> maybe [] (\n' -> [ Attr "name" n' ]) n
-      (Input t n lb) -> tag (lb <> renderElement (Input t n "") "") "label" []
+      (Form mt act) ->
+        tag' "form" [ Attr "method" mt, Attr "action" act ]
+
+      (Input t n "") ->
+        tag' "input" ([ Attr "type" t ] <> maybe [] (\n' -> [ Attr "name" n' ]) n)
+
+      (Input t n lb) ->
+        tag (lb <> renderElement (Input t n "") "") "label" []
+
+      (Button lb) ->
+        tag' "button" [ Attr "type" "submit", Attr "value" lb ]
 
 render :: WidgetNode -> String
 render (WidgetNode el children) =
@@ -58,4 +67,4 @@ render (WidgetNode el children) =
     renderElement el ct
 
 form :: WidgetNode
-form = WidgetNode formWidget [ WidgetNode address [], WidgetNode submit [] ]
+form = WidgetNode formWidget [ WidgetNode positionInput [], WidgetNode submit [] ]

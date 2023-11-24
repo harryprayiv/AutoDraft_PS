@@ -24,12 +24,16 @@
                     console
                     effect
                     prelude
+                    maybe
                     aff
-                    argonaut-core
-                    argonaut-codecs
                     arrays
                     web-events
                     web-html
+                    web-dom
+                    affjax-web
+                    argonaut
+                    argonaut-core
+                    argonaut-codecs
                   ];
 
                 dir = ./.;
