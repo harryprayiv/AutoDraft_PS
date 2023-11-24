@@ -34,6 +34,7 @@
                     argonaut
                     argonaut-core
                     argonaut-codecs
+                    ordered-collections
                   ];
 
                 dir = ./.;
