@@ -2,7 +2,10 @@ module Main (main) where
 
 import Prelude
 import Effect (Effect)
+import Effect.Class (liftEffect)
+import Effect.Class.Console (log, logShow)
 import Effect.Aff (launchAff_)
+import Effect.Aff
 import Data.Argonaut.Decode (decodeJson, (.:?))
 import Data.Argonaut.Core (jsonEmptyObject, stringify)
 import Data.Argonaut.Parser (jsonParser)
@@ -18,11 +21,10 @@ import Web.HTML.HTMLInputElement (fromElement, value)
 import Web.DOM.Document
 import Web.DOM.ParentNode (querySelector)
 import Affjax.Web (get)
--- import Web.HTML.Window
--- import Network.HTTP.Affjax.Web (Response)
+import Affjax (printError)
+import Affjax.ResponseFormat (json)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(Just, Nothing), maybe)
-
 import Form (render, form)
 
 foreign import setHTML :: String -> Effect Unit
@@ -44,20 +46,25 @@ handleSubmit doc event = do
   preventDefault event
   Just positionInputEl <- querySelector "#position" (toDocument doc)
   positionValue <- getInputValue positionInputEl
-  launchAff_ $ loadAndFilterPlayers positionValue
+  launchAff_ $ loadAndFilterPlayers positionValue -- Run the Aff action
 
 getInputValue :: Maybe Element -> Effect String
 getInputValue (Just el) = fromElement el >>= maybe (pure "") value
 getInputValue Nothing = pure ""
 
-loadAndFilterPlayers :: String -> Effect Unit
+loadAndFilterPlayers :: String -> Aff Unit
 loadAndFilterPlayers position = do
-  response <- get "./appData/rosters/activePlayers.json"
+  response <- get json "./appData/rosters/activePlayers.json"
   case response of
-    Left error -> log $ "Error loading JSON: " <> show error
+    Left error ->
+      log $ "Error loading JSON: " <> genericErrorToString error
     Right res -> case decodeJson res.body of
       Right json -> do
         -- Process the JSON and filter the players
-        -- Implement your filtering logic here
+        -- Implement your filtering logic here using 'json' and 'position'
         pure unit
-      Left error -> log $ "Error parsing JSON: " <> show error
+      Left error ->
+        log $ "Error parsing JSON: " <> stringify error
+
+genericErrorToString :: forall e. Show e => e -> String
+genericErrorToString = show
