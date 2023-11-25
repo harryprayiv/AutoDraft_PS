@@ -30,8 +30,6 @@ data HTMLAttr = Attr Name Value
 renderAttr :: HTMLAttr -> HTML
 renderAttr (Attr name value) = " " <> name <> "=\"" <> value <> "\""
 
--- The foldAcc function is not needed anymore
-
 tag :: HTML -> Name -> Array HTMLAttr -> HTML
 tag content name attrs =
   let
@@ -52,7 +50,7 @@ renderElement el ct =
       Input t n lb ->
         tag (lb <> renderElement (Input t n "") "") "label" []
       Button lb ->
-        tag' "button" [Attr "type" "submit", Attr "value" lb]
+        tag lb "button" [Attr "type" "submit"]  -- Correctly placing 'lb' as button content
 
 render :: WidgetNode -> String
 render (WidgetNode el children) =
@@ -63,3 +61,4 @@ render (WidgetNode el children) =
 
 form :: WidgetNode
 form = WidgetNode formWidget [WidgetNode positionInput [], WidgetNode submit []]
+
