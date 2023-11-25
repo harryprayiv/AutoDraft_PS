@@ -2,7 +2,7 @@ module Form (WidgetNode, render, form) where
 
 import Prelude
 import Data.Array (foldl)
-import Data.Maybe (Maybe(Just, Nothing), maybe)
+import Data.Maybe (Maybe(Just), maybe)
 
 type InputType = String
 type Label = String
@@ -26,16 +26,16 @@ formWidget = Form "post" "#"
 
 data HTMLAttr = Attr Name Value
 
-foldAcc :: forall a. (a -> String) -> String -> a -> String
-foldAcc fn s = fn >>> (<>) s
-
+-- This function takes an HTMLAttr and returns its string representation
 renderAttr :: HTMLAttr -> HTML
 renderAttr (Attr name value) = " " <> name <> "=\"" <> value <> "\""
+
+-- The foldAcc function is not needed anymore
 
 tag :: HTML -> Name -> Array HTMLAttr -> HTML
 tag content name attrs =
   let
-    attrs' = foldl (foldAcc renderAttr) "" attrs
+    attrs' = foldl (\s attr -> s <> renderAttr attr) "" attrs
   in
     "<" <> name <> attrs' <> ">" <> content <> "</" <> name <> ">"
 
@@ -45,24 +45,21 @@ renderElement el ct =
     tag' = tag ct
   in
     case el of
-      (Form mt act) ->
-        tag' "form" [ Attr "method" mt, Attr "action" act ]
-
-      (Input t n "") ->
-        tag' "input" ([ Attr "type" t ] <> maybe [] (\n' -> [ Attr "name" n' ]) n)
-
-      (Input t n lb) ->
+      Form mt act ->
+        tag' "form" [Attr "method" mt, Attr "action" act]
+      Input t n "" ->
+        tag' "input" ([Attr "type" t] <> maybe [] (\n' -> [Attr "name" n']) n)
+      Input t n lb ->
         tag (lb <> renderElement (Input t n "") "") "label" []
-
-      (Button lb) ->
-        tag' "button" [ Attr "type" "submit", Attr "value" lb ]
+      Button lb ->
+        tag' "button" [Attr "type" "submit", Attr "value" lb]
 
 render :: WidgetNode -> String
 render (WidgetNode el children) =
   let
-    ct = foldl (foldAcc render) "" children
+    ct = foldl (\s child -> s <> render child) "" children
   in
     renderElement el ct
 
 form :: WidgetNode
-form = WidgetNode formWidget [ WidgetNode positionInput [], WidgetNode submit [] ]
+form = WidgetNode formWidget [WidgetNode positionInput [], WidgetNode submit []]
