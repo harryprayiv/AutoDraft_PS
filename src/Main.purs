@@ -80,6 +80,12 @@ handleSubmit htmlDoc event = do
         Nothing -> log "Position input element not found"
     Nothing -> log "Body element not found"
 
+displayPlayers :: HTMLDocument -> Players -> Effect Unit
+displayPlayers htmlDoc players = do
+  -- Code to display the players on the web page
+  -- For example, you can create a new div and append it to the body
+  -- displaying each player's information
+
 getInputValue :: Maybe Element -> Effect String
 getInputValue maybeEl = case maybeEl of
   Just el -> do
