@@ -76,7 +76,7 @@ handleSubmit htmlDoc event = do
       case positionInputEl of
         Just inputEl -> do
           positionValue <- getInputValue (Just inputEl)
-          launchAff_ $ loadAndFilterPlayers positionValue
+          launchAff $ loadAndFilterPlayers positionValue >>= displayPlayers htmlDoc
         Nothing -> log "Position input element not found"
     Nothing -> log "Body element not found"
 
