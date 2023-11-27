@@ -9,3 +9,5 @@
 /.psa*
 /.spago
 appData/*
+description.txt
+issues.txt
