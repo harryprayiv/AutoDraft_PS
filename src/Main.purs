@@ -19,18 +19,38 @@ import Web.Event.Event (Event, EventType(..), preventDefault)
 import Web.Event.EventTarget (eventListener, addEventListener)
 import Web.HTML.HTMLInputElement (fromElement, value)
 import Web.DOM.ParentNode (QuerySelector(..), querySelector)
-import Affjax (get)
-import Affjax (get)
-import Affjax.ResponseFormat (json)  -- Make sure this is imported correctly
+import Affjax (AffjaxDriver, get, request, defaultRequest)
+import Affjax.Web as AW
+import Affjax.ResponseHeader
+import Affjax.ResponseFormat (json)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (JsonDecodeError, printJsonDecodeError)
+import Data.Argonaut.Parser (jsonParser)
 import Data.Map as Map
 import Form (render, form)
 import Data.Maybe (Maybe(..))
 import Data.Either (Either(..))
 import Data.Foldable (traverse_)
 
+foreign import _ajax :: 
+  AffjaxDriver -> 
+  String -> 
+  String -> 
+  (String -> String -> ResponseHeader) -> 
+  AjaxRequest a -> 
+  EffectFnAff (Response Foreign)
 
+type AjaxRequest a = 
+  { method :: String
+  , url :: String
+  , headers :: Array { field :: String, value :: String }
+  , content :: Maybe Foreign
+  , responseType :: String
+  , username :: Maybe String
+  , password :: Maybe String
+  , withCredentials :: Boolean
+  , timeout :: Int
+  }
 
 foreign import setHTML :: String -> Effect Unit
 
@@ -108,10 +128,10 @@ getInputValue maybeEl = case maybeEl of
     Nothing -> pure Nothing
   Nothing -> pure Nothing
 
-
 loadAndFilterPlayers :: String -> Aff Players
 loadAndFilterPlayers position = do
-  response <- get json "./appData/rosters/activePlayers.json"  -- Use json correctly here
+  let req = defaultRequest { url = "./appData/rosters/activePlayers.json", responseType = json }
+  response <- request AW.driver req
   case response of
     Left error -> do
       log $ "Error loading JSON: " <> show error
@@ -122,3 +142,4 @@ loadAndFilterPlayers position = do
       Left decodeError -> do
         log $ "Error parsing JSON: " <> printJsonDecodeError decodeError
         pure Map.empty
+

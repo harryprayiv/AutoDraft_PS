@@ -22,15 +22,16 @@
                   with purs-nix.ps-pkgs;
                   [
                     console
+                    foreign
                     effect
                     prelude
                     maybe
                     aff
+                    affjax-web
                     arrays
                     web-events
                     web-html
                     web-dom
-                    affjax-web
                     argonaut
                     argonaut-core
                     argonaut-codecs
