@@ -94,17 +94,17 @@ getInputValue maybeEl = case maybeEl of
       Nothing -> pure ""
   Nothing -> pure ""
 
-loadAndFilterPlayers :: String -> Aff Unit
+loadAndFilterPlayers :: String -> Aff Players
 loadAndFilterPlayers position = do
   response <- get json "./appData/rosters/activePlayers.json"
   case response of
-    Left error ->
+    Left error -> do
       log $ "Error loading JSON: " <> printError error
+      pure Map.empty
     Right res -> case decodeJson res.body :: Either JsonDecodeError ActivePlayers of
-      Right activePlayers -> do
-        let players = activePlayers.officialPlayers
-        let filteredPlayers = Map.filter (\player -> player.primaryPosition == position) players
-        liftEffect $ logShow filteredPlayers
-      Left decodeError ->
+      Right activePlayers ->
+        pure $ Map.filter (\player -> player.primaryPosition == position) (activePlayers.officialPlayers)
+      Left decodeError -> do
         log $ "Error parsing JSON: " <> printJsonDecodeError decodeError
+        pure Map.empty
 
