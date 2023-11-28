@@ -3,9 +3,9 @@ module Main (main) where
 import Affjax.ResponseHeader
 import Foreign
 import Foreign.Object (Object, lookup)
+import Foreign.Object as Object
 import Prelude
 import Web.DOM.ParentNode
-
 import Affjax (AffjaxDriver, get, request, defaultRequest)
 import Affjax (AffjaxDriver, request, defaultRequest, printError, Response)
 import Affjax.ResponseFormat (json)
@@ -21,6 +21,7 @@ import Data.Argonaut.Parser (jsonParser)
 import Data.Either (Either(..))
 import Data.Foldable (foldl, traverse_)
 import Data.FoldableWithIndex
+import Data.Tuple (Tuple(..))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
@@ -33,7 +34,7 @@ import Effect.Aff.Compat (EffectFnAff)
 import Effect.Class.Console (log)
 import Form (render, form)
 import Prelude (Unit, bind, discard, pure, ($), (<>), (==))
-import Web.DOM.Document (createElement)
+import Web.DOM.Document (createElement, createTextNode)
 import Web.DOM.Element (Element)
 import Web.DOM.Node (Node, appendChild)
 import Web.DOM.Node (textContent)
@@ -82,6 +83,14 @@ instance decodeJsonActivePlayers :: DecodeJson ActivePlayers where
     playersMapWrapped <- decodeJson playersObj
     pure $ ActivePlayers playersMapWrapped
 
+createPlayerElement :: HTMLDocument -> Player -> Effect Element
+createPlayerElement htmlDoc player = do
+  playerDiv <- createElement htmlDoc "div"
+  let playerText = player.useName <> " - Position: " <> player.primaryPosition
+  textNode <- createTextNode htmlDoc playerText
+  _ <- appendChild textNode playerDiv
+  pure playerDiv
+
 unwrapPlayersMap :: PlayersMap -> Map String Player
 unwrapPlayersMap (PlayersMap map) = map
 
@@ -102,7 +111,7 @@ decodeJsonPlayer json = do
   useLastName <- decodeField obj "useLastName"
   useName <- decodeField obj "useName"
 
-  -- Return a record, not a data constructor
+  -- Return a record
   pure
     { active: active
     , batSide: batSide
@@ -122,26 +131,29 @@ decodeField obj fieldName = case lookup fieldName obj of
 
 newtype PlayersMap = PlayersMap (Map String Player)
 
+type PlayerEntry = { key :: String, playerJson :: Json }
+
 instance decodeJsonPlayersMap :: DecodeJson PlayersMap where
   decodeJson json = do
     obj <- case toObject json of
       Just o -> pure o
       Nothing -> Left $ TypeMismatch "Expected an object"
-
     playersObj <- obj .:? "officialPlayers" >>= maybe (pure jsonEmptyObject) pure
 
-    -- Define the function to fold over the map
-    let
-      buildMap key playerJson acc = do
-        case acc of
-          Left err -> Left err
-          Right playersMap -> do
-            case decodeJsonPlayer playerJson of
-              Right player -> Right $ Map.insert key player playersMap
-              Left error -> Left error
+    case toObject playersObj of
+      Just players -> do
+        let
+          entries :: Array (Tuple String Json)
+          entries = Object.toUnfoldable players
 
-    -- Use foldrWithIndex to accumulate the results
-    foldrWithIndex buildMap (Right Map.empty) playersObj
+        let
+          buildMap acc (Tuple key playerJson) =
+            case decodeJsonPlayer playerJson of
+              Right player -> Map.insert key player acc
+              Left _ -> acc
+
+        pure $ PlayersMap $ foldl buildMap Map.empty entries
+      Nothing -> Left $ TypeMismatch "Expected 'officialPlayers' to be an object"
 
 type Player =
   { active :: Boolean
@@ -199,12 +211,6 @@ displayPlayers htmlDoc players = do
       playerElements <- traverse (createPlayerElement htmlDoc) playerValues
       traverse_ (appendChild bodyElement) playerElements
     Nothing -> pure unit
-
-createPlayerElement :: HTMLDocument -> Player -> Effect Element
-createPlayerElement htmlDoc player = do
-  playerDiv <- createElement htmlDoc "div"
-  _ <- textContent (player.useName <> " - Position: " <> player.primaryPosition) playerDiv
-  pure playerDiv
 
 getInputValue :: Maybe Element -> Effect (Maybe String)
 getInputValue maybeEl = case maybeEl of

@@ -32,6 +32,7 @@
                     web-events
                     web-html
                     web-dom
+                    tuples
                     argonaut
                     argonaut-core
                     argonaut-codecs
