@@ -83,14 +83,6 @@ instance decodeJsonActivePlayers :: DecodeJson ActivePlayers where
     playersMapWrapped <- decodeJson playersObj
     pure $ ActivePlayers playersMapWrapped
 
-createPlayerElement :: HTMLDocument -> Player -> Effect Element
-createPlayerElement htmlDoc player = do
-  playerDiv <- createElement htmlDoc "div"
-  let playerText = player.useName <> " - Position: " <> player.primaryPosition
-  textNode <- createTextNode htmlDoc playerText
-  _ <- appendChild textNode playerDiv
-  pure playerDiv
-
 unwrapPlayersMap :: PlayersMap -> Map String Player
 unwrapPlayersMap (PlayersMap map) = map
 
@@ -192,25 +184,25 @@ setupEventListeners htmlDoc = do
 handleSubmit :: HTMLDocument -> Event -> Effect Unit
 handleSubmit htmlDoc event = do
   preventDefault event
-  bodyEl <- body htmlDoc
-  case bodyEl of
-    Just el -> do
-      positionInputEl <- querySelector (QuerySelector "#position") el -- Use el directly
-      positionValue <- getInputValue positionInputEl
-      case positionValue of
-        Just pos -> loadAndFilterPlayers pos >>= displayPlayers htmlDoc
-        Nothing -> log "Position input element not found"
-    Nothing -> log "Body element not found"
+  positionInputEl <- querySelector (QuerySelector "#position") (body htmlDoc)
+  positionValue <- getInputValue positionInputEl
+  case positionValue of
+    Just pos -> loadAndFilterPlayers pos >>= displayPlayers htmlDoc
+    Nothing -> log "Position input element not found"
 
 displayPlayers :: HTMLDocument -> Players -> Effect Unit
 displayPlayers htmlDoc players = do
-  maybeBody <- body htmlDoc
-  case maybeBody of
-    Just bodyElement -> do
-      let playerValues = Map.values players
-      playerElements <- traverse (createPlayerElement htmlDoc) playerValues
-      traverse_ (appendChild bodyElement) playerElements
-    Nothing -> pure unit
+  let playerValues = Map.values players
+  playerElements <- traverse (createPlayerElement htmlDoc) playerValues
+  traverse_ (appendChild (body htmlDoc)) playerElements
+
+createPlayerElement :: HTMLDocument -> Player -> Effect Element
+createPlayerElement htmlDoc player = do
+  playerDiv <- createElement htmlDoc "div"
+  let playerText = player.useName <> " - Position: " <> player.primaryPosition
+  textNode <- createTextNode htmlDoc playerText
+  _ <- appendChild textNode playerDiv
+  pure playerDiv
 
 getInputValue :: Maybe Element -> Effect (Maybe String)
 getInputValue maybeEl = case maybeEl of
