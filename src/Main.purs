@@ -19,7 +19,8 @@ import Data.Argonaut.Decode.Error (JsonDecodeError(..))
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Argonaut.Parser (jsonParser)
 import Data.Either (Either(..))
-import Data.Foldable (traverse_)
+import Data.Foldable (foldl, traverse_)
+import Data.FoldableWithIndex
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
@@ -74,9 +75,11 @@ newtype ActivePlayers = ActivePlayers PlayersMap
 
 instance decodeJsonActivePlayers :: DecodeJson ActivePlayers where
   decodeJson json = do
-    obj <- jsonParser json
+    obj <- case toObject json of
+      Just o -> pure o
+      Nothing -> Left $ TypeMismatch "Expected an object"
     playersObj <- obj .: "officialPlayers"
-    playersMapWrapped <- decodeJson playersObj -- Assuming playersObj is a JSON object
+    playersMapWrapped <- decodeJson playersObj
     pure $ ActivePlayers playersMapWrapped
 
 unwrapPlayersMap :: PlayersMap -> Map String Player
@@ -99,7 +102,8 @@ decodeJsonPlayer json = do
   useLastName <- decodeField obj "useLastName"
   useName <- decodeField obj "useName"
 
-  pure $ Player
+  -- Return a record, not a data constructor
+  pure
     { active: active
     , batSide: batSide
     , currentTeam: currentTeam
@@ -120,14 +124,26 @@ newtype PlayersMap = PlayersMap (Map String Player)
 
 instance decodeJsonPlayersMap :: DecodeJson PlayersMap where
   decodeJson json = do
-    obj <- jsonParser json
-    playerObjs <- obj .:? "officialPlayers" >>= maybe (pure jsonEmptyObject) pure
-    players <- traverse decodeJsonPlayer playerObjs -- Changed from decodePlayer to decodeJsonPlayer
-    case players of
-      -- Right ps -> pure $ PlayersMap $ Map.fromList $ map (\player -> (show $ playerId player, player)) ps
-      Left error -> pure $ Left error
+    obj <- case toObject json of
+      Just o -> pure o
+      Nothing -> Left $ TypeMismatch "Expected an object"
 
-newtype Player = Player
+    playersObj <- obj .:? "officialPlayers" >>= maybe (pure jsonEmptyObject) pure
+
+    -- Define the function to fold over the map
+    let
+      buildMap key playerJson acc = do
+        case acc of
+          Left err -> Left err
+          Right playersMap -> do
+            case decodeJsonPlayer playerJson of
+              Right player -> Right $ Map.insert key player playersMap
+              Left error -> Left error
+
+    -- Use foldrWithIndex to accumulate the results
+    foldrWithIndex buildMap (Right Map.empty) playersObj
+
+type Player =
   { active :: Boolean
   , batSide :: String
   , currentTeam :: Int
@@ -157,7 +173,7 @@ setupEventListeners htmlDoc = do
       case formEl of
         Just el -> do
           eventHandler <- eventListener (handleSubmit htmlDoc)
-          addEventListener (EventType "submit") eventHandler false el -- Use el directly
+          addEventListener (EventType "submit") eventHandler false el
         Nothing -> log "Form element not found"
     Nothing -> log "Body element not found"
 
@@ -212,7 +228,7 @@ loadAndFilterPlayers position = do
             playersMap = unwrapPlayersMap playersMapWrapped
 
             filterFunc :: String -> Player -> Boolean
-            filterFunc _ (Player player) = player.primaryPosition == position
+            filterFunc _ player = player.primaryPosition == position
           in
             pure $ Map.filterWithKey filterFunc playersMap
         Left decodeError -> do
