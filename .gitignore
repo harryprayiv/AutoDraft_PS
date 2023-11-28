@@ -9,6 +9,4 @@
 /.psa*
 /.spago
 appData/*
-description.txt
-issues.txt
-future.txt
+.prjState/*
