@@ -4,8 +4,6 @@ export function setHTML (html) {
   }
 }
 
-
-// Add the _ajax function here
 export function _ajax(platformSpecificDriver, timeoutErrorMessageIdent, requestFailedMessageIdent, mkHeader, options) {
   return function (errback, callback) {
     var xhr = platformSpecificDriver.newXHR();

@@ -34,7 +34,7 @@ import Effect.Aff.Compat (EffectFnAff)
 import Effect.Class.Console (log)
 import Form (render, form)
 import Prelude (Unit, bind, discard, pure, ($), (<>), (==))
-import Web.DOM.Document (createElement, createTextNode)
+import Web.DOM.Document (createElement, createTextNode, toNonElementParentNode)
 import Web.DOM.Element (Element)
 import Web.DOM.Node (Node, appendChild)
 import Web.DOM.Node (textContent)
@@ -190,18 +190,24 @@ handleSubmit htmlDoc event = do
     Just pos -> loadAndFilterPlayers pos >>= displayPlayers htmlDoc
     Nothing -> log "Position input element not found"
 
-displayPlayers :: HTMLDocument -> Players -> Effect Unit
-displayPlayers htmlDoc players = do
-  let playerValues = Map.values players
-  playerElements <- traverse (createPlayerElement htmlDoc) playerValues
-  traverse_ (appendChild (body htmlDoc)) playerElements
+displayPlayers :: Players -> Effect Unit
+displayPlayers players = do
+  doc <- document
+  maybeBody <- body doc
+  case maybeBody of
+    Just bodyElement -> do
+      let playerValues = Map.values players
+      playerElements <- traverse createPlayerElement playerValues
+      traverse_ (appendChild bodyElement) playerElements
+    Nothing -> pure unit
 
-createPlayerElement :: HTMLDocument -> Player -> Effect Element
-createPlayerElement htmlDoc player = do
-  playerDiv <- createElement htmlDoc "div"
+createPlayerElement :: Player -> Effect Element
+createPlayerElement player = do
+  doc <- document
+  playerDiv <- createElement doc "div"
   let playerText = player.useName <> " - Position: " <> player.primaryPosition
-  textNode <- createTextNode htmlDoc playerText
-  _ <- appendChild textNode playerDiv
+  textNode <- createTextNode doc playerText
+  _ <- appendChild playerDiv textNode
   pure playerDiv
 
 getInputValue :: Maybe Element -> Effect (Maybe String)
