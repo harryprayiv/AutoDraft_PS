@@ -37,6 +37,10 @@
                     argonaut-core
                     argonaut-codecs
                     ordered-collections
+                    halogen-vdom
+                    halogen
+                    # html-codegen-halogen
+                    
                   ];
 
                 dir = ./.;
