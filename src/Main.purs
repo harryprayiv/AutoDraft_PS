@@ -6,11 +6,6 @@ import Foreign
 import Prelude
 import Web.DOM.ParentNode
 
-import Effect (Effect)
-import Effect.Aff (Aff)
-import Effect.Aff.Compat (EffectFnAff)
-import Effect.Class.Console (log)
-
 import Affjax (AffjaxDriver, get, request, defaultRequest)
 import Affjax (AffjaxDriver, request, defaultRequest, printError, Response)
 import Affjax (defaultRequest, request, Response)
@@ -35,13 +30,19 @@ import Data.Maybe (Maybe(..), maybe)
 import Data.Set (toMap)
 import Data.Traversable (sequence, traverse)
 import Data.Tuple (Tuple(..))
-
+import Effect (Effect)
+import Effect.Aff (Aff)
+import Effect.Aff.Compat (EffectFnAff)
+import Effect.Class.Console (log)
+import Foreign.Object (Object, lookup)
+import Foreign.Object as Object
+import Form (render, form)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
-import Halogen.Query.HalogenM as HM
 import Halogen.HTML.Properties as HP
+import Halogen.Query.HalogenM as HM
 import Halogen.VDom.Driver (runUI)
 import Prelude (Unit, bind, discard, pure, ($), (<>), (==))
 import Web.DOM.Document (createElement, createTextNode, toNonElementParentNode)
@@ -56,11 +57,6 @@ import Web.HTML.HTMLElement (HTMLElement)
 import Web.HTML.HTMLInputElement (HTMLInputElement, value, fromElement)
 import Web.HTML.HTMLInputElement as HTMLInputElement
 import Web.HTML.Window (document)
-
-import Form (render, form)
-
-import Foreign.Object (Object, lookup)
-import Foreign.Object as Object
 
 foreign import _ajax
   :: forall a
@@ -101,68 +97,58 @@ type State =
   }
 
 -- Halogen Component
-component :: forall q i o m. H.Component HH.HTML q i o m
-component =
-  H.mkComponent
-    { initialState: const { players: Map.empty, positionInput: "" }
-    , render
-    , eval: H.mkEval $ H.defaultEval
-        { handleAction = handleAction
-        , initialize = Just LoadData
-        }
-    }
+-- Component definition
+component :: H.Component HH.HTML Action Void Aff
+component = H.mkComponent { initialState, render, eval }
   where
-  render state =
-    HH.div_
-      [ HH.input [ HE.onValueInput (Just <<< HandleInput) ]
-      , HH.button [ HE.onClick (const Submit) ] [ HH.text "Submit" ]
-      , HH.div_ (renderPlayers state.players)
-      ]
+  initialState _ = { players: Map.empty, positionInput: "" }
 
-  handleAction = case _ of
-    HandleInput input -> H.modify_ _ { positionInput = input }
-    Submit -> filterPlayers
-    LoadData -> loadData
-    SetPlayers players -> H.modify_ _ { players = players }
+  render state = HH.div_ [ inputField, submitButton, playerList state.players ]
+
+  eval (HandleInput input) = H.modify_ (_ { positionInput = input })
+  eval Submit = filterPlayers
+  eval LoadData = loadData
+  eval (SetPlayers players) = H.modify_ (_ { players = players })
+
+  inputField = HH.input [ HP.type_ HP.InputText, HE.onValueInput HandleInput ]
+  submitButton = HH.button [ HE.onClick (const Submit) ] [ HH.text "Submit" ]
+  playerList players = HH.div_ $ map renderPlayer $ map toUnfoldable players
 
   filterPlayers = do
     state <- H.get
     let filtered = Map.filter (\p -> p.primaryPosition == state.positionInput) state.players
-    H.modify_ _ { players = filtered }
+    H.modify_ (_ { players = filtered })
 
   loadData = do
     players <- loadPlayers
-    H.modify_ _ { players = players }
+    H.modify_ (_ { players = players })
 
-  renderPlayers players =
-    map toUnfoldable players >>= \player ->
-      [ HH.div_
-          [ HH.text (player.useName <> " - Position: " <> player.primaryPosition) ]
-      ]
+  renderPlayer player = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
 type PlayerWithKey =
   { key :: String
   , player :: Player
   }
 
-render :: State -> H.ComponentHTML Action
+-- Update the render function to include the forall keyword with slots and m
+render :: forall slots m. State -> H.ComponentHTML Action slots m
 render state =
   HH.div_
-    [ HH.form_ [ HE.onSubmit (const (Just Submit)) ]
+    [ HH.form_ [ HE.onSubmit \_ -> Just Submit ] -- still broken
         [ HH.input [ HP.type_ HP.InputText, HE.onValueInput HandleInput, HP.value state.positionInput ]
         , HH.button [ HP.type_ HP.ButtonSubmit ] [ HH.text "Submit" ]
         ]
     , HH.div_ (renderPlayers state.players)
     ]
 
-renderPlayers :: Map String Player -> Array (H.ComponentHTML action)
+-- Updated renderPlayers function
+renderPlayers :: forall slots m. Map String Player -> Array (H.ComponentHTML Action slots m)
 renderPlayers players =
-  map (\(Tuple _ player) -> HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ])
-    (toUnfoldable players)
+  map (\(Tuple _ player) -> renderPlayer player) $ Map.toUnfoldable players
 
-renderPlayer :: { key :: String, player :: Player } -> H.ComponentHTML action
-renderPlayer playerWithKey =
-  HH.div_ [ HH.text $ playerWithKey.player.useName <> " - Position: " <> playerWithKey.player.primaryPosition ]
+renderPlayer :: forall slots m. Player -> H.ComponentHTML Action slots m
+renderPlayer player =
+  HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
 eval :: Action -> HM.HalogenM State Action () Void m Unit
 eval action = case action of
@@ -182,15 +168,14 @@ eval action = case action of
 loadPlayers :: Aff (Map String Player)
 loadPlayers = do
   let req = defaultRequest { url = "./appData/rosters/activePlayers.json", responseFormat = json }
-  response <- AW.request req
+  response <- request req
   case response of
     Left error -> do
       log $ "Error loading JSON: " <> printError error
       pure Map.empty
     Right res ->
       case decodeJson res.body of
-        Right (ActivePlayers playersMapWrapped) ->
-          pure $ unwrapPlayersMap playersMapWrapped
+        Right (ActivePlayers players) -> pure players
         Left decodeError -> do
           log $ "Error parsing JSON: " <> printJsonDecodeError decodeError
           pure Map.empty
