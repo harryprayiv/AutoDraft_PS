@@ -134,7 +134,7 @@ type PlayerWithKey =
 render :: forall slots m. State -> H.ComponentHTML Action slots m
 render state =
   HH.div_
-    [ HH.form_ [ HE.onSubmit \_ -> Just Submit ] -- still broken
+    [ HH.form_ [ HE.onSubmit \_ -> Just Submit ]
         [ HH.input [ HP.type_ HP.InputText, HE.onValueInput HandleInput, HP.value state.positionInput ]
         , HH.button [ HP.type_ HP.ButtonSubmit ] [ HH.text "Submit" ]
         ]
@@ -144,10 +144,10 @@ render state =
 -- Updated renderPlayers function
 renderPlayers :: forall slots m. Map String Player -> Array (H.ComponentHTML Action slots m)
 renderPlayers players =
-  map (\(Tuple _ player) -> renderPlayer player) $ Map.toUnfoldable players
+  map renderPlayer $ Map.toUnfoldable players
 
-renderPlayer :: forall slots m. Player -> H.ComponentHTML Action slots m
-renderPlayer player =
+renderPlayer :: forall slots m. Tuple String Player -> H.ComponentHTML Action slots m
+renderPlayer (Tuple _ player) =
   HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
 eval :: Action -> HM.HalogenM State Action () Void m Unit
@@ -168,7 +168,7 @@ eval action = case action of
 loadPlayers :: Aff (Map String Player)
 loadPlayers = do
   let req = defaultRequest { url = "./appData/rosters/activePlayers.json", responseFormat = json }
-  response <- request req
+  response <- AW.request req
   case response of
     Left error -> do
       log $ "Error loading JSON: " <> printError error
