@@ -44,13 +44,13 @@ renderElement el ct =
   in
     case el of
       Form mt act ->
-        tag' "form" [Attr "method" mt, Attr "action" act]
+        tag' "form" [ Attr "method" mt, Attr "action" act ]
       Input t n "" ->
-        tag' "input" ([Attr "type" t] <> maybe [] (\n' -> [Attr "name" n']) n)
+        tag' "input" ([ Attr "type" t ] <> maybe [] (\n' -> [ Attr "name" n' ]) n)
       Input t n lb ->
         tag (lb <> renderElement (Input t n "") "") "label" []
       Button lb ->
-        tag lb "button" [Attr "type" "submit"]  -- Correctly placing 'lb' as button content
+        tag lb "button" [ Attr "type" "submit" ] -- Correctly placing 'lb' as button content
 
 render :: WidgetNode -> String
 render (WidgetNode el children) =
@@ -60,5 +60,5 @@ render (WidgetNode el children) =
     renderElement el ct
 
 form :: WidgetNode
-form = WidgetNode formWidget [WidgetNode positionInput [], WidgetNode submit []]
+form = WidgetNode formWidget [ WidgetNode positionInput [], WidgetNode submit [] ]
 
