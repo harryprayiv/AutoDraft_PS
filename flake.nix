@@ -104,7 +104,6 @@
                 packages =
                   with pkgs;
                   [
-                    nodePackages.webpack-cli
                     ps-tools.for-0_15.purescript-language-server
                     ps-command
                     purs-nix.purescript
