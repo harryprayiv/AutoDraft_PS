@@ -30,68 +30,21 @@
                 dir = ./.;
               };
           ps-command = ps.command { };
-          concurrent = pkgs.writeShellApplication {
-            name = "concurrent";
-            runtimeInputs = with pkgs; [
-              concurrently
-            ];
-            text = ''
-              concurrently\
-                --color "auto"\
-                --prefix "[{command}]"\
-                --handle-input\
-                --restart-tries 10\
-                "$@"
-            '';
-          };
           purs-watch = pkgs.writeShellApplication {
             name = "purs-watch";
             runtimeInputs = with pkgs; [ entr ps-command ];
-            text = ''find {src,test} | entr -s "purs-nix $*"'';
-          };
-          webpack = pkgs.writeShellApplication {
-            name = "webpack";
-            runtimeInputs = with pkgs; [ nodejs ];
-            text = ''npx webpack "$@"'';
-          };
-          serve = pkgs.writeShellApplication {
-            name = "serve";
-            runtimeInputs = with pkgs; [ webpack ];
-            text = ''BROWSER_RUNTIME=1 webpack serve --progress --open "$@"'';
-          };
-          dev = pkgs.writeShellApplication {
-            name = "dev";
-            runtimeInputs = with pkgs; [
-              concurrent
-              purs-watch
-              serve
-            ];
-            text = ''
-              concurrent \
-                "purs-watch compile"\
-                serve\
-                "runtime up"
-            '';
-          };
-          bundle = pkgs.writeShellApplication {
-            name = "bundle";
-            runtimeInputs = with pkgs; [ webpack ];
-            text = ''BROWSER_RUNTIME=1 webpack --mode=production "$@"'';
+            text = "find src | entr -s 'echo building && purs-nix compile'";
           };
           vite = pkgs.writeShellApplication {
             name = "vite";
             runtimeInputs = with pkgs; [ nodejs ];
             text = "npx vite --open";
           };
-          tests = pkgs.writeShellApplication {
-            name = "tests";
-            text = ''purs-watch test "$@"'';
-            runtimeInputs = [ purs-watch ];
+          dev = pkgs.writeShellApplication {
+            name = "dev";
+            runtimeInputs = with pkgs; [ concurrently ];
+            text = "concurrently purs-watch vite";
           };
-          # checks = pkgs.runCommand "checks"
-          #   {
-          #     buildInputs = testRuntime;
-          #   } ''${ps.test.run { }}; touch $out'';
         in
         {
           packages.default = ps.modules.Main.bundle { };
@@ -110,7 +63,6 @@
                     purs-watch
                     vite
                     dev
-                    bundle
                   ];
               };
         }
