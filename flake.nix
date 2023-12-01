@@ -23,8 +23,8 @@
                   [
                     console
                     effect
-                    prelude
                     halogen
+                    prelude
                   ];
 
                 dir = ./.;
