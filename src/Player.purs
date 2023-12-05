@@ -50,7 +50,6 @@ decodeJsonPlayer json = do
     Just o -> Right o
     Nothing -> Left $ TypeMismatch "Invalid JSON structure for Player"
 
-  -- Decode each field with proper error handling
   active <- decodeField obj "active"
   batSide <- decodeField obj "batSide"
   currentTeam <- decodeField obj "currentTeam"
@@ -61,7 +60,6 @@ decodeJsonPlayer json = do
   useLastName <- decodeField obj "useLastName"
   useName <- decodeField obj "useName"
 
-  -- Return a record
   pure
     { active: active
     , batSide: batSide

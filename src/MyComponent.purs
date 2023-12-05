@@ -30,14 +30,14 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
 
+data Query a = GetState (State -> a)
+
 type State =
   { players :: Map String Player
   , positionInput :: String
   , loading :: Boolean
   , error :: Maybe String
   }
-
-data Query a = GetState (State -> a)
 
 data Message
   = PlayersLoaded (Map String Player)
@@ -49,13 +49,12 @@ data Action
   | SetPlayers (Map String Player)
   | HandleError String
 
-component :: forall q i m. H.Component q i Message m
+component :: forall m. H.Component HH.HTML () State Message m
 component = H.mkComponent
   { initialState: \_ -> { players: Map.empty, positionInput: "", loading: false, error: Nothing }
   , render
   , eval: H.mkEval $ H.defaultEval
       { handleAction = handleAction
-      , handleQuery = handleQuery
       }
   }
   where
@@ -67,40 +66,6 @@ component = H.mkComponent
       , maybe HH.div_ errorDiv state.error
       , playersTable state.players
       ]
-
-  eval :: forall m. Action -> H.HalogenM State Action Void Aff Unit
-  eval action = case action of
-    HandleInput input -> H.modify_ (_ { positionInput = input })
-    Submit -> do
-      currentState <- H.get
-      loadData currentState.positionInput
-    SetPlayers players -> H.modify_ (_ { players = players, loading = false })
-    HandleError errorMsg -> H.modify_ (_ { error = Just errorMsg, loading = false })
-
-  handleAction :: Action -> H.HalogenM State Action q Message m Unit
-  handleAction action = case action of
-    HandleInput input -> H.modify_ (_ { positionInput = input })
-    Submit -> loadData
-    SetPlayers players -> H.modify_ (_ { players = players, loading = false })
-    HandleError errorMsg -> H.modify_ (_ { error = Just errorMsg, loading = false })
-
-  handleQuery :: Query ~> H.HalogenM State Action q Message m
-  handleQuery = case _ of
-    GetState k -> do
-      state <- H.get
-      pure $ Just $ k state
-
-  loadData :: H.HalogenM State Action Message Aff Unit
-  loadData = do
-    currentState <- H.get
-    let positionInput = currentState.positionInput
-    H.modify_ (_ { loading = true })
-    response <- H.liftAff $ fetchPlayers
-    case response of
-      Right players -> do
-        let filteredPlayers = Map.filter (\p -> p.primaryPosition == positionInput) players
-        H.raise $ PlayersLoaded filteredPlayers
-      Left errorMsg -> H.raise $ LoadingError errorMsg
 
   inputField inputValue =
     HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
@@ -116,6 +81,40 @@ component = H.mkComponent
     HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
   errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
+
+  eval :: Action -> H.HalogenM State () Message Aff Unit
+  eval action = case action of
+    HandleInput input -> H.modify_ (_ { positionInput = input })
+    Submit -> do
+      currentState <- H.get
+      loadData currentState.positionInput
+    SetPlayers players -> H.modify_ (_ { players = players, loading = false })
+    HandleError errorMsg -> H.modify_ (_ { error = Just errorMsg, loading = false })
+
+  handleAction :: Action -> H.HalogenM State () Message Aff Unit
+  handleAction action = case action of
+    HandleInput input -> H.modify_ (_ { positionInput = input })
+    Submit -> do
+      currentState <- H.get
+      loadData currentState.positionInput
+    SetPlayers players -> H.modify_ (_ { players = players, loading = false })
+    HandleError errorMsg -> H.modify_ (_ { error = Just errorMsg, loading = false })
+
+  handleQuery :: Query ~> H.HalogenM State Action q Message m
+  handleQuery = case _ of
+    GetState k -> do
+      state <- H.get
+      pure $ Just $ k state
+
+  loadData :: String -> H.HalogenM State () Message Aff Unit
+  loadData positionInput = do
+    H.modify_ (_ { loading = true })
+    response <- H.liftAff $ fetchPlayers
+    case response of
+      Right players -> do
+        let filteredPlayers = Map.filter (\p -> p.primaryPosition == positionInput) players
+        H.raise $ PlayersLoaded filteredPlayers
+      Left errorMsg -> H.raise $ LoadingError errorMsg
 
 fetchPlayers :: Aff (Either String (Map String Player))
 fetchPlayers = do
