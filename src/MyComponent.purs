@@ -90,7 +90,7 @@ component = H.mkComponent
       state <- H.get
       pure $ Just $ k state
 
-  loadData :: H.HalogenM State Action q Message Aff Unit
+  loadData :: H.HalogenM State Action Message Aff Unit
   loadData = do
     currentState <- H.get
     let positionInput = currentState.positionInput
@@ -116,16 +116,6 @@ component = H.mkComponent
     HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
   errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
-
--- loadData :: String -> H.HalogenM State Action q Message Aff Unit
--- loadData positionInput = do
---   H.modify_ (_ { loading = true })
---   response <- H.liftAff $ fetchPlayers
---   case response of
---     Right players -> do
---       let filteredPlayers = Map.filter (\p -> p.primaryPosition == positionInput) players
---       H.raise $ PlayersLoaded filteredPlayers
---     Left errorMsg -> H.raise $ LoadingError errorMsg
 
 fetchPlayers :: Aff (Either String (Map String Player))
 fetchPlayers = do
