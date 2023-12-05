@@ -23,8 +23,22 @@
                   [
                     console
                     effect
+                    foreign
                     halogen
                     prelude
+                    maybe
+                    aff
+                    affjax-web
+                    arrays
+                    web-events
+                    web-html
+                    web-dom
+                    tuples
+                    argonaut
+                    argonaut-core
+                    argonaut-codecs
+                    ordered-collections
+                    halogen-vdom
                   ];
 
                 dir = ./.;
