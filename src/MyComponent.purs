@@ -1,9 +1,13 @@
-module MyComponent where
+module MyComponent
+  ( component
+  ) where
 
 import Prelude
 import Player
 
 import Effect.Aff (Aff)
+
+import Effect.Aff.Class (class MonadAff)
 
 import Halogen as H
 import Halogen.HTML as HH
@@ -49,7 +53,7 @@ data Action
   | SetPlayers (Map String Player)
   | HandleError String
 
-component :: forall m. H.Component HH.HTML () State Message m
+component :: forall m. MonadAff m => H.Component HH.HTML () State Message m
 component = H.mkComponent
   { initialState: \_ -> { players: Map.empty, positionInput: "", loading: false, error: Nothing }
   , render
@@ -58,7 +62,7 @@ component = H.mkComponent
       }
   }
   where
-  render :: State -> H.ComponentHTML Action
+  render :: State -> H.ComponentHTML Action ()
   render state =
     HH.div_
       [ inputField state.positionInput
@@ -66,6 +70,15 @@ component = H.mkComponent
       , maybe HH.div_ errorDiv state.error
       , playersTable state.players
       ]
+
+  eval :: forall m. MonadAff m => Action -> H.HalogenM State () Message m Unit
+  eval action = case action of
+    HandleInput input -> H.modify_ (_ { positionInput = input })
+    Submit -> do
+      currentState <- H.get
+      loadData currentState.positionInput
+    SetPlayers players -> H.modify_ (_ { players = players, loading = false })
+    HandleError errorMsg -> H.modify_ (_ { error = Just errorMsg, loading = false })
 
   inputField inputValue =
     HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
@@ -82,16 +95,7 @@ component = H.mkComponent
 
   errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
 
-  eval :: Action -> H.HalogenM State () Message Aff Unit
-  eval action = case action of
-    HandleInput input -> H.modify_ (_ { positionInput = input })
-    Submit -> do
-      currentState <- H.get
-      loadData currentState.positionInput
-    SetPlayers players -> H.modify_ (_ { players = players, loading = false })
-    HandleError errorMsg -> H.modify_ (_ { error = Just errorMsg, loading = false })
-
-  handleAction :: Action -> H.HalogenM State () Message Aff Unit
+  handleAction :: forall m. MonadAff m => Action -> H.HalogenM State () Message m Unit
   handleAction action = case action of
     HandleInput input -> H.modify_ (_ { positionInput = input })
     Submit -> do
@@ -106,7 +110,7 @@ component = H.mkComponent
       state <- H.get
       pure $ Just $ k state
 
-  loadData :: String -> H.HalogenM State () Message Aff Unit
+  loadData :: forall m. MonadAff m => String -> H.HalogenM State () Message m Unit
   loadData positionInput = do
     H.modify_ (_ { loading = true })
     response <- H.liftAff $ fetchPlayers
@@ -116,10 +120,10 @@ component = H.mkComponent
         H.raise $ PlayersLoaded filteredPlayers
       Left errorMsg -> H.raise $ LoadingError errorMsg
 
-fetchPlayers :: Aff (Either String (Map String Player))
+fetchPlayers :: forall m. MonadAff m => m (Either String (Map String Player))
 fetchPlayers = do
   let req = defaultRequest { url = "./appData/rosters/activePlayers.json", responseFormat = json }
-  response <- AW.request req
+  response <- H.liftAff $ AW.request req -- Use liftAff to lift the Aff action into the m monad
   pure $ case response of
     Left error ->
       Left $ "Error loading JSON: " <> printError error
@@ -129,3 +133,4 @@ fetchPlayers = do
           Right playersMap
         Left decodeError ->
           Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
+
