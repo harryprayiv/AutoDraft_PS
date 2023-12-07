@@ -23,13 +23,14 @@ import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
+import Halogen.Aff.Util (runHalogenAff)
 import Halogen (HalogenM, liftAff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
-data Query a = GetState (State -> a) -- Define this based on your needs
+data Query a = GetState (State -> a)
 
 type State = 
   { players :: Map String Player
@@ -41,10 +42,11 @@ type State =
 data Action
   = HandleInput String
   | Submit
+  | FetchData String -- New action for fetching data
   | SetPlayers (Map String Player)
   | HandleError String
 
-component :: forall m. MonadAff m => H.Component Query State Action m
+component :: H.Component Query State Action Aff
 component = H.mkComponent
   { initialState: \_ -> initialState
   , render
@@ -59,55 +61,63 @@ component = H.mkComponent
       , error: Nothing
       }
 
-    render :: State -> H.ComponentHTML Action Void m
-    render state = 
+    render :: State -> H.ComponentHTML Action () Aff
+    render state =   
       HH.div_
         [ inputField state.positionInput,
           submitButton state.loading,
           maybe HH.div_ errorDiv state.error,
           playersTable state.players
         ]
-        
-    handleAction :: forall output. Action -> H.HalogenM State Action () m output
+    
+    handleAction :: Action -> HalogenM State Action () Aff Unit -- 
+                                                    {- ``Aff`` Could not match kind Type -> Type with kind Type while checking that type Aff has kind Type -}
     handleAction action = case action of
-      HandleInput input -> H.modify_ (_ { positionInput = input })
+      HandleInput input -> 
+        H.modify_ \s -> s { positionInput = input }
       Submit -> do
         currentState <- H.get
-        _ <- H.liftAff $ loadData currentState.positionInput
-        pure unit
-      SetPlayers players -> H.modify_ (_ { players = players, loading = false })
-      HandleError errorMsg -> H.modify_ (_ { error = Just errorMsg, loading = false })
+        H.liftEffect $ runHalogenAff $ loadData currentState.positionInput
+      FetchData positionInput -> do
+        result <- liftAff $ fetchPlayers
+        case result of
+          Right playersMap -> 
+            let filteredPlayers = Map.filter (\p -> show p.primaryPosition == positionInput) playersMap
+            in H.modify_ \s -> s { players = filteredPlayers, loading = false }
+          Left errorMsg -> 
+            H.modify_ \s -> s { error = Just errorMsg, loading = false }
+      SetPlayers players -> 
+        H.modify_ \s -> s { players = players, loading = false }
+      HandleError errorMsg -> 
+        H.modify_ \s -> s { error = Just errorMsg, loading = false }
+        
+    filterPlayers :: Map String Player -> String -> Map String Player
+    filterPlayers players positionInput = 
+      Map.filter (\p -> show p.primaryPosition == positionInput) players
 
-    inputField :: String -> H.ComponentHTML Action () m
+    inputField :: String -> H.ComponentHTML Action () Aff
     inputField inputValue = HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
 
-    submitButton :: Boolean -> H.ComponentHTML Action () m
+    submitButton :: Boolean -> H.ComponentHTML Action () Aff
     submitButton loading = 
       HH.button 
         [ HP.disabled loading, HE.onClick $ const Submit ] 
         [ HH.text (if loading then "Loading..." else "Load Players") ]
 
-    playersTable :: Map String Player -> H.ComponentHTML Action () m
+    playersTable :: Map String Player -> H.ComponentHTML Action () Aff
     playersTable players = HH.div_ $ map renderPlayer $ Map.toUnfoldable players
 
-    renderPlayer :: Tuple String Player -> H.ComponentHTML Action () m
+    renderPlayer :: Tuple String Player -> H.ComponentHTML Action () Aff
     renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
-    errorDiv :: String -> H.ComponentHTML Action () m
+    errorDiv :: String -> H.ComponentHTML Action () Aff
     errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
 
     loadData :: String -> Aff Unit
     loadData positionInput = do
-      _ <- H.liftEffect $ H.modify_ (_ { loading = true })
-      response <- fetchPlayers
-      case response of
-        Right players -> do
-          let filteredPlayers = Map.filter (\p -> show p.primaryPosition == positionInput) players
-          _ <- H.liftEffect $ H.modify_ (\s -> s { players = filteredPlayers, loading = false })
-          pure unit
-        Left errorMsg -> do
-          _ <- H.liftEffect $ H.modify_ (_ { error = Just errorMsg, loading = false })
-          pure unit
+      H.modify_ \s -> s { loading = true }
+      _ <- fetchPlayers
+      pure unit
 
     fetchPlayers :: Aff (Either String (Map String Player))
     fetchPlayers = do
