@@ -19,13 +19,13 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, makeAff)
 import Effect.Aff.Class (class MonadAff)
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
-import Halogen.Aff.Util (runHalogenAff)
 import Halogen (HalogenM, liftAff)
 import Halogen as H
+import Halogen.Aff.Util (runHalogenAff)
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
@@ -42,7 +42,7 @@ type State =
 data Action
   = HandleInput String
   | Submit
-  | FetchData String -- New action for fetching data
+  | FetchData
   | SetPlayers (Map String Player)
   | HandleError String
 
@@ -69,28 +69,28 @@ component = H.mkComponent
           maybe HH.div_ errorDiv state.error,
           playersTable state.players
         ]
-    
-    handleAction :: Action -> HalogenM State Action () Aff Unit -- 
-                                                    {- ``Aff`` Could not match kind Type -> Type with kind Type while checking that type Aff has kind Type -}
+
+    handleAction :: Action -> HalogenM State Action () Aff Unit
     handleAction action = case action of
       HandleInput input -> 
         H.modify_ \s -> s { positionInput = input }
       Submit -> do
         currentState <- H.get
         H.liftEffect $ runHalogenAff $ loadData currentState.positionInput
-      FetchData positionInput -> do
+      FetchData -> do
+        currentState <- H.get
         result <- liftAff $ fetchPlayers
         case result of
           Right playersMap -> 
-            let filteredPlayers = Map.filter (\p -> show p.primaryPosition == positionInput) playersMap
+            let filteredPlayers = Map.filter (\p -> show p.primaryPosition == currentState.positionInput) playersMap
             in H.modify_ \s -> s { players = filteredPlayers, loading = false }
           Left errorMsg -> 
             H.modify_ \s -> s { error = Just errorMsg, loading = false }
       SetPlayers players -> 
         H.modify_ \s -> s { players = players, loading = false }
       HandleError errorMsg -> 
-        H.modify_ \s -> s { error = Just errorMsg, loading = false }
-        
+        H.modify_ _ \s -> s { error = Just errorMsg, loading = false } --ERROR! An anonymous function argument appears in an invalid context.
+
     filterPlayers :: Map String Player -> String -> Map String Player
     filterPlayers players positionInput = 
       Map.filter (\p -> show p.primaryPosition == positionInput) players
@@ -116,8 +116,10 @@ component = H.mkComponent
     loadData :: String -> Aff Unit
     loadData positionInput = do
       H.modify_ \s -> s { loading = true }
-      _ <- fetchPlayers
-      pure unit
+      result <- fetchPlayers
+      case result of
+        Right playersMap -> pure unit -- Or dispatch an action to handle the result
+        Left errorMsg -> pure unit -- Or dispatch an action to handle the error
 
     fetchPlayers :: Aff (Either String (Map String Player))
     fetchPlayers = do
