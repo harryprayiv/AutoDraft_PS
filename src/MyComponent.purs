@@ -5,7 +5,7 @@ module MyComponent
 import Player
 import Prelude
 
-import Affjax (AffjaxDriver, request, defaultRequest, printError, Response)
+import Affjax (AffjaxDriver, get, request, defaultRequest, printError, Response)
 import Affjax.ResponseFormat (json)
 import Affjax.Web as AW
 import Data.Argonaut.Core (Json, jsonEmptyObject, toObject, jsonNull)
@@ -46,85 +46,109 @@ data Action
   | SetPlayers (Either String (Map String Player))
   | HandleError String
 
-component :: H.Component Query State Action Aff
-component = H.mkComponent
-  { initialState
-  , render
-  , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
+component :: forall q i o m. MonadAff m => H.Component q i o m
+component =
+  H.mkComponent
+    { initialState
+    , render
+    , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
+    }
+
+initialState :: State
+initialState = 
+  { players: Map.empty
+  , positionInput: ""
+  , loading: false
+  , error: Nothing
   }
-  where
-    initialState :: State
-    initialState = 
-      { players: Map.empty
-      , positionInput: ""
-      , loading: false
-      , error: Nothing
-      }
 
-    render :: State -> H.ComponentHTML Action () Aff
-    render state =   
-      HH.div_
-        [ inputField state.positionInput,
-          submitButton state.loading,
-          maybe HH.div_ errorDiv state.error,
-          playersTable state.players
-        ]
+render :: forall m. State -> H.ComponentHTML Action () m
+render state =    
+  HH.div_
+    [ inputField state.positionInput,
+      submitButton state.loading,
+      maybe HH.div_ errorDiv state.error,
+      playersTable state.players
+    ]
 
-    handleAction :: Action -> HalogenM State Action () Aff Unit
-    handleAction action = case action of
-      HandleInput input -> 
-        H.modify_ \s -> s { positionInput = input }
-      Submit -> 
-        H.modify_ \s -> s { loading = true } *> H.raise LoadPlayers
-      LoadPlayers -> do
-        currentState <- H.get
-        let positionInput = currentState.positionInput
-        liftAff $ fetchPlayers >>= H.raise <<< SetPlayers <<< map (filterPlayers positionInput)
-      SetPlayers result ->
-        case result of
-          Right playersMap ->
-            H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
-          Left errorMsg ->
-            H.modify_ \s -> s { error = Just errorMsg, loading = false }
-      HandleError errorMsg -> 
+handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
+handleAction = case _ of
+  HandleInput input -> 
+    H.modify_ \s -> s { positionInput = input }
+  
+  Submit -> do
+    positionInput <- H.gets _.positionInput
+    H.modify_ \s -> s { loading = true }
+    result <- liftAff $ fetchAndFilterPlayers positionInput
+    case result of
+      Left errorMsg ->
         H.modify_ \s -> s { error = Just errorMsg, loading = false }
+      Right playersMap ->
+        H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
 
-    loadData :: String -> Aff (Either String (Map String Player))
-    loadData positionInput = do
-      H.modify_ \s -> s { loading = true }
-      result <- fetchPlayers
-      pure $ result >>= pure <<< filterPlayers positionInput
+  LoadPlayers -> do
+    positionInput <- H.gets _.positionInput
+    H.modify_ \s -> s { loading = true }
+    result <- liftAff $ fetchAndFilterPlayers positionInput
+    case result of
+      Left errorMsg ->
+        H.modify_ \s -> s { error = Just errorMsg, loading = false }
+      Right playersMap ->
+        H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
 
-    fetchPlayers :: Aff (Either String (Map String Player))
-    fetchPlayers = do
-      let req = defaultRequest
-                { url = "./appData/rosters/activePlayers.json"
-                , responseFormat = json }
-      response <- AW.request req
-      pure $ case response of
-        Left err -> Left $ "Error loading JSON: " <> printError err
-        Right res -> case decodeJson res.body of
-          Right (ActivePlayers (PlayersMap playersMap)) -> Right playersMap
-          Left decodeError -> Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
+  SetPlayers result ->
+    case result of
+      Right playersMap ->
+        H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
+      Left errorMsg ->
+        H.modify_ \s -> s { error = Just errorMsg, loading = false }
+  HandleError errorMsg -> 
+    H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
-    inputField :: String -> H.ComponentHTML Action () Aff
-    inputField inputValue = HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
+fetchAndFilterPlayers :: String -> Aff (Either String (Map String Player))
+fetchAndFilterPlayers positionInput = do
+  response <- AW.request $ defaultRequest
+    { url = "./appData/rosters/activePlayers.json"
+    , responseFormat = json
+    }
+  pure $ case response of
+    Left err -> Left $ "Error loading JSON: " <> printError err
+    Right res -> case decodeJson res.body of
+      Right (ActivePlayers (PlayersMap playersMap)) ->
+        Right $ filterPlayers positionInput playersMap
+      Left decodeError ->
+        Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
 
-    submitButton :: Boolean -> H.ComponentHTML Action () Aff
-    submitButton loading = 
-      HH.button 
-        [ HP.disabled loading, HE.onClick $ const Submit ] 
-        [ HH.text (if loading then "Loading..." else "Load Players") ]
+fetchPlayers :: Aff (Either String (Map String Player))
+fetchPlayers = do
+  let req = defaultRequest
+            { url = "./appData/rosters/activePlayers.json"
+            , responseFormat = json }
+  response <- AW.request req
+  pure $ case response of
+    Left err -> Left $ "Error loading JSON: " <> printError err
+    Right res -> case decodeJson res.body of
+      Right (ActivePlayers (PlayersMap playersMap)) -> Right playersMap
+      Left decodeError -> Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
 
-    playersTable :: Map String Player -> H.ComponentHTML Action () Aff
-    playersTable players = HH.div_ $ map renderPlayer $ Map.toUnfoldable players
+inputField :: String -> H.ComponentHTML Action () Aff
+inputField inputValue = HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
 
-    renderPlayer :: Tuple String Player -> H.ComponentHTML Action () Aff
-    renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
+submitButton :: Boolean -> H.ComponentHTML Action () Aff
+submitButton loading = 
+  HH.button 
+    [ HP.disabled loading, HE.onClick $ const Submit ] 
+    [ HH.text (if loading then "Loading..." else "Load Players") ]
 
-    errorDiv :: String -> H.ComponentHTML Action () Aff
-    errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
+playersTable :: Map String Player -> H.ComponentHTML Action () Aff
+playersTable players = HH.div_ $ map renderPlayer $ Map.toUnfoldable players
 
-    filterPlayers :: String -> Map String Player -> Map String Player
-    filterPlayers positionInput players = 
-      Map.filter (\p -> show p.primaryPosition == positionInput) players
+renderPlayer :: Tuple String Player -> H.ComponentHTML Action () Aff
+renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
+
+errorDiv :: String -> H.ComponentHTML Action () Aff
+errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
+
+filterPlayers :: String -> Map String Player -> Map String Player
+filterPlayers positionInput players = 
+  Map.filter (\p -> show p.primaryPosition == positionInput) players
