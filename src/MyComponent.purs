@@ -42,13 +42,13 @@ type State =
 data Action
   = HandleInput String
   | Submit
-  | FetchData
-  | SetPlayers (Map String Player)
+  | LoadPlayers
+  | SetPlayers (Either String (Map String Player))
   | HandleError String
 
 component :: H.Component Query State Action Aff
 component = H.mkComponent
-  { initialState: \_ -> initialState
+  { initialState
   , render
   , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
   }
@@ -74,26 +74,38 @@ component = H.mkComponent
     handleAction action = case action of
       HandleInput input -> 
         H.modify_ \s -> s { positionInput = input }
-      Submit -> do
+      Submit -> 
+        H.modify_ \s -> s { loading = true } *> H.raise LoadPlayers
+      LoadPlayers -> do
         currentState <- H.get
-        H.liftEffect $ runHalogenAff $ loadData currentState.positionInput
-      FetchData -> do
-        currentState <- H.get
-        result <- liftAff $ fetchPlayers
+        let positionInput = currentState.positionInput
+        liftAff $ fetchPlayers >>= H.raise <<< SetPlayers <<< map (filterPlayers positionInput)
+      SetPlayers result ->
         case result of
-          Right playersMap -> 
-            let filteredPlayers = Map.filter (\p -> show p.primaryPosition == currentState.positionInput) playersMap
-            in H.modify_ \s -> s { players = filteredPlayers, loading = false }
-          Left errorMsg -> 
+          Right playersMap ->
+            H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
+          Left errorMsg ->
             H.modify_ \s -> s { error = Just errorMsg, loading = false }
-      SetPlayers players -> 
-        H.modify_ \s -> s { players = players, loading = false }
       HandleError errorMsg -> 
-        H.modify_ _ \s -> s { error = Just errorMsg, loading = false } --ERROR! An anonymous function argument appears in an invalid context.
+        H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
-    filterPlayers :: Map String Player -> String -> Map String Player
-    filterPlayers players positionInput = 
-      Map.filter (\p -> show p.primaryPosition == positionInput) players
+    loadData :: String -> Aff (Either String (Map String Player))
+    loadData positionInput = do
+      H.modify_ \s -> s { loading = true }
+      result <- fetchPlayers
+      pure $ result >>= pure <<< filterPlayers positionInput
+
+    fetchPlayers :: Aff (Either String (Map String Player))
+    fetchPlayers = do
+      let req = defaultRequest
+                { url = "./appData/rosters/activePlayers.json"
+                , responseFormat = json }
+      response <- AW.request req
+      pure $ case response of
+        Left err -> Left $ "Error loading JSON: " <> printError err
+        Right res -> case decodeJson res.body of
+          Right (ActivePlayers (PlayersMap playersMap)) -> Right playersMap
+          Left decodeError -> Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
 
     inputField :: String -> H.ComponentHTML Action () Aff
     inputField inputValue = HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
@@ -113,23 +125,6 @@ component = H.mkComponent
     errorDiv :: String -> H.ComponentHTML Action () Aff
     errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
 
-    loadData :: String -> Aff Unit
-    loadData positionInput = do
-      H.modify_ \s -> s { loading = true }
-      result <- fetchPlayers
-      case result of
-        Right playersMap -> pure unit -- Or dispatch an action to handle the result
-        Left errorMsg -> pure unit -- Or dispatch an action to handle the error
-
-    fetchPlayers :: Aff (Either String (Map String Player))
-    fetchPlayers = do
-      let req = defaultRequest 
-                { url = "./appData/rosters/activePlayers.json"
-                , responseFormat = json
-                }
-      response <- AW.request req
-      pure $ case response of
-        Left err -> Left $ "Error loading JSON: " <> printError err
-        Right res -> case decodeJson res.body of
-          Right (ActivePlayers (PlayersMap playersMap)) -> Right playersMap
-          Left decodeError -> Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
+    filterPlayers :: String -> Map String Player -> Map String Player
+    filterPlayers positionInput players = 
+      Map.filter (\p -> show p.primaryPosition == positionInput) players
