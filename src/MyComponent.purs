@@ -70,7 +70,7 @@ handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o
 handleAction = case _ of
   HandleInput input -> 
     H.modify_ \s -> s { positionInput = input }
-    
+      
   Submit -> do
     positionInput <- H.gets _.positionInput
     H.liftEffect $ Console.log $ "Position Input: " <> positionInput
@@ -128,8 +128,10 @@ renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Positi
 
 fetchAndFilterPlayers :: String -> Aff (Either String (Map String Player))
 fetchAndFilterPlayers positionInput = do
-  let request = defaultRequest { url = "./appData/rosters/activePlayers.json", responseFormat = json }
-  response <- AW.request request
+  response <- AW.request $ defaultRequest
+    { url = "./appData/rosters/activePlayers.json"
+    , responseFormat = json
+    }
 
   case response of
     Left err -> do
@@ -142,7 +144,7 @@ fetchAndFilterPlayers positionInput = do
       case decodeJson res.body of
         Right (ActivePlayers (PlayersMap playersMap)) -> do
           let filteredPlayers = filterPlayers positionInput playersMap
-          H.liftEffect $ Console.log $ "Filtered Players: " <> show filteredPlayers
+          H.liftEffect $ Console.log $ "Filtered Players: " <> show (Map.size filteredPlayers)
           pure $ Right filteredPlayers
         Left decodeError -> do
           let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
