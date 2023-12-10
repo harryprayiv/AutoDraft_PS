@@ -3,13 +3,12 @@ module MyComponent
   )
   where
 
-import Player (ActivePlayers(..), Player, PlayersMap(..))
 import Prelude
 
-
-import Affjax (defaultRequest, printError)
+import Affjax (defaultRequest)
 import Affjax.ResponseFormat (json)
 import Affjax.Web as AW
+import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Either (Either(..))
@@ -25,7 +24,7 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-
+import Player (ActivePlayers(..), Player, PlayersMap(..), filterPlayers)
 data Query a = GetState (State -> a)
 
 type State = 
@@ -71,7 +70,7 @@ handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o
 handleAction = case _ of
   HandleInput input -> 
     H.modify_ \s -> s { positionInput = input }
-  
+    
   Submit -> do
     positionInput <- H.gets _.positionInput
     H.liftEffect $ Console.log $ "Position Input: " <> positionInput
@@ -82,8 +81,8 @@ handleAction = case _ of
         H.liftEffect $ Console.log $ "Error: " <> errorMsg
         H.modify_ \s -> s { error = Just errorMsg, loading = false }
       Right playersMap -> do
-        H.liftEffect $ Console.log $ "Filtered Players: " <> show playersMap
-        H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
+        let filteredPlayers = filterPlayers positionInput playersMap
+        H.liftEffect $ Console.log $ "Filtered Players: " <> show (Map.size filteredPlayers)
 
   LoadPlayers -> do
     positionInput <- H.gets _.positionInput
@@ -127,21 +126,26 @@ playersTable players = HH.div_ $ map renderPlayer $ Map.toUnfoldable players
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
-filterPlayers :: String -> Map String Player -> Map String Player
-filterPlayers positionInput players = 
-  Map.filter (\p -> show p.primaryPosition == positionInput) players
-
 fetchAndFilterPlayers :: String -> Aff (Either String (Map String Player))
 fetchAndFilterPlayers positionInput = do
-  response <- AW.request $ defaultRequest
-    { url = "./appData/rosters/activePlayers.json"
-    , responseFormat = json
-    }
-  -- H.liftEffect $ Console.log $ "Response: " <> show response
-  pure $ case response of
-    Left err -> Left $ "Error loading JSON: " <> printError err
-    Right res -> case decodeJson res.body of
-      Right (ActivePlayers (PlayersMap playersMap)) ->
-        Right $ filterPlayers positionInput playersMap
-      Left decodeError ->
-        Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
+  let request = defaultRequest { url = "./appData/rosters/activePlayers.json", responseFormat = json }
+  response <- AW.request request
+
+  case response of
+    Left err -> do
+      let errorMsg = "Fetch Error: " <> AW.printError err
+      H.liftEffect $ Console.log errorMsg
+      pure $ Left errorMsg
+
+    Right res -> do
+      H.liftEffect $ Console.log $ "Raw JSON Response: " <> stringify res.body
+      case decodeJson res.body of
+        Right (ActivePlayers (PlayersMap playersMap)) -> do
+          let filteredPlayers = filterPlayers positionInput playersMap
+          H.liftEffect $ Console.log $ "Filtered Players: " <> show filteredPlayers
+          pure $ Right filteredPlayers
+        Left decodeError -> do
+          let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
+          H.liftEffect $ Console.log errorMsg
+          pure $ Left errorMsg
+

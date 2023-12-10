@@ -34,6 +34,7 @@
                     web-html
                     web-dom
                     tuples
+                    integers
                     argonaut
                     argonaut-core
                     argonaut-codecs
