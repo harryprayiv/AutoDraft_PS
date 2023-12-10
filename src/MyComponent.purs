@@ -1,6 +1,7 @@
 module MyComponent
   ( component
-  ) where
+  )
+  where
 
 import Player
 import Prelude
@@ -49,7 +50,7 @@ data Action
 component :: forall q i o m. MonadAff m => H.Component q i o m
 component =
   H.mkComponent
-    { initialState
+    { initialState: \_ -> initialState  -- Ensure initialState is correctly used
     , render
     , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
     }
@@ -62,12 +63,12 @@ initialState =
   , error: Nothing
   }
 
-render :: forall m. State -> H.ComponentHTML Action () m
+render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =    
   HH.div_
     [ inputField state.positionInput,
       submitButton state.loading,
-      maybe HH.div_ errorDiv state.error,
+      maybeElem state.error errorDiv,
       playersTable state.players
     ]
 
@@ -105,6 +106,33 @@ handleAction = case _ of
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
+maybeElem :: forall w i a. Maybe a -> (a -> HH.HTML w i) -> HH.HTML w i
+maybeElem val f =
+  case val of
+    Just x -> f x
+    Nothing -> HH.text ""
+
+inputField :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
+inputField inputValue = 
+  HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
+
+submitButton :: forall m. MonadAff m => Boolean -> H.ComponentHTML Action () m
+submitButton loading = 
+  HH.button [ HP.disabled loading, HE.onClick $ const Submit ] [ HH.text (if loading then "Loading..." else "Load Players") ]
+
+errorDiv :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
+errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
+
+playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
+playersTable players = HH.div_ $ map renderPlayer $ Map.toUnfoldable players
+
+renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
+renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
+
+filterPlayers :: String -> Map String Player -> Map String Player
+filterPlayers positionInput players = 
+  Map.filter (\p -> show p.primaryPosition == positionInput) players
+
 fetchAndFilterPlayers :: String -> Aff (Either String (Map String Player))
 fetchAndFilterPlayers positionInput = do
   response <- AW.request $ defaultRequest
@@ -118,37 +146,3 @@ fetchAndFilterPlayers positionInput = do
         Right $ filterPlayers positionInput playersMap
       Left decodeError ->
         Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
-
-fetchPlayers :: Aff (Either String (Map String Player))
-fetchPlayers = do
-  let req = defaultRequest
-            { url = "./appData/rosters/activePlayers.json"
-            , responseFormat = json }
-  response <- AW.request req
-  pure $ case response of
-    Left err -> Left $ "Error loading JSON: " <> printError err
-    Right res -> case decodeJson res.body of
-      Right (ActivePlayers (PlayersMap playersMap)) -> Right playersMap
-      Left decodeError -> Left $ "Error parsing JSON: " <> printJsonDecodeError decodeError
-
-inputField :: String -> H.ComponentHTML Action () Aff
-inputField inputValue = HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
-
-submitButton :: Boolean -> H.ComponentHTML Action () Aff
-submitButton loading = 
-  HH.button 
-    [ HP.disabled loading, HE.onClick $ const Submit ] 
-    [ HH.text (if loading then "Loading..." else "Load Players") ]
-
-playersTable :: Map String Player -> H.ComponentHTML Action () Aff
-playersTable players = HH.div_ $ map renderPlayer $ Map.toUnfoldable players
-
-renderPlayer :: Tuple String Player -> H.ComponentHTML Action () Aff
-renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
-
-errorDiv :: String -> H.ComponentHTML Action () Aff
-errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
-
-filterPlayers :: String -> Map String Player -> Map String Player
-filterPlayers positionInput players = 
-  Map.filter (\p -> show p.primaryPosition == positionInput) players
