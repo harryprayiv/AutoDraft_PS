@@ -3,30 +3,23 @@ module MyComponent
   )
   where
 
-import Player
+import Player (ActivePlayers(..), Player, PlayersMap(..))
 import Prelude
 
-import Affjax (AffjaxDriver, get, request, defaultRequest, printError, Response)
+import Affjax (defaultRequest, printError)
 import Affjax.ResponseFormat (json)
 import Affjax.Web as AW
-import Data.Argonaut.Core (Json, jsonEmptyObject, toObject, jsonNull)
 import Data.Argonaut.Decode (decodeJson)
-import Data.Argonaut.Decode.Class (class DecodeJson)
-import Data.Argonaut.Decode.Combinators ((.:), (.:?))
-import Data.Argonaut.Decode.Error (JsonDecodeError(..), printJsonDecodeError)
+import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Either (Either(..))
-import Data.Foldable (foldl)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
-import Effect.Aff (Aff, makeAff)
+import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
-import Foreign.Object (Object, lookup)
-import Foreign.Object as Object
-import Halogen (HalogenM, liftAff)
+import Halogen (liftAff)
 import Halogen as H
-import Halogen.Aff.Util (runHalogenAff)
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
@@ -50,7 +43,7 @@ data Action
 component :: forall q i o m. MonadAff m => H.Component q i o m
 component =
   H.mkComponent
-    { initialState: \_ -> initialState  -- Ensure initialState is correctly used
+    { initialState: \_ -> initialState
     , render
     , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
     }
