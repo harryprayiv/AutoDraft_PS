@@ -12,3 +12,5 @@ appData/*
 .prjState/*
 /appData/
 /script/
+.vite/deps/_metadata.json
+.gitignore
