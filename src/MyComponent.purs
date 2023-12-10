@@ -6,6 +6,7 @@ module MyComponent
 import Player (ActivePlayers(..), Player, PlayersMap(..))
 import Prelude
 
+
 import Affjax (defaultRequest, printError)
 import Affjax.ResponseFormat (json)
 import Affjax.Web as AW
@@ -18,6 +19,7 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
+import Effect.Console as Console
 import Halogen (liftAff)
 import Halogen as H
 import Halogen.HTML as HH
@@ -72,12 +74,15 @@ handleAction = case _ of
   
   Submit -> do
     positionInput <- H.gets _.positionInput
+    H.liftEffect $ Console.log $ "Position Input: " <> positionInput
     H.modify_ \s -> s { loading = true }
     result <- liftAff $ fetchAndFilterPlayers positionInput
     case result of
-      Left errorMsg ->
+      Left errorMsg -> do
+        H.liftEffect $ Console.log $ "Error: " <> errorMsg
         H.modify_ \s -> s { error = Just errorMsg, loading = false }
-      Right playersMap ->
+      Right playersMap -> do
+        H.liftEffect $ Console.log $ "Filtered Players: " <> show playersMap
         H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
 
   LoadPlayers -> do
@@ -132,6 +137,7 @@ fetchAndFilterPlayers positionInput = do
     { url = "./appData/rosters/activePlayers.json"
     , responseFormat = json
     }
+  -- H.liftEffect $ Console.log $ "Response: " <> show response
   pure $ case response of
     Left err -> Left $ "Error loading JSON: " <> printError err
     Right res -> case decodeJson res.body of
