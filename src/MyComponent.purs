@@ -24,7 +24,8 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (ActivePlayers(..), Player, PlayersMap(..), filterPlayers)
+import Player (ActivePlayers(..), Player, PlayersMap(..))
+
 data Query a = GetState (State -> a)
 
 type State = 
@@ -36,9 +37,8 @@ type State =
 
 data Action
   = HandleInput String
-  | Submit
-  | LoadPlayers
-  | SetPlayers (Either String (Map String Player))
+  | Initialize
+  | FilterPlayers
   | HandleError String
 
 component :: forall q i o m. MonadAff m => H.Component q i o m
@@ -46,7 +46,10 @@ component =
   H.mkComponent
     { initialState: \_ -> initialState
     , render
-    , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
+    , eval: H.mkEval $ H.defaultEval
+        { handleAction = handleAction
+        , initialize = Just Initialize
+        }
     }
 
 initialState :: State
@@ -60,74 +63,57 @@ initialState =
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =    
   HH.div_
-    [ inputField state.positionInput,
-      submitButton state.loading,
-      maybeElem state.error errorDiv,
-      playersTable state.players
+    [ HH.div_ 
+      [ inputField state.positionInput,
+        HH.button 
+          [ HE.onClick $ const FilterPlayers
+          , HP.disabled state.loading
+          ] 
+          [ HH.text (if state.loading then "Loading..." else "Filter Players") ]
+      ]
+    , playersTable state.players
     ]
 
-handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
+handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
 handleAction = case _ of
   HandleInput input -> 
     H.modify_ \s -> s { positionInput = input }
-      
-  Submit -> do
-    positionInput <- H.gets _.positionInput
-    H.liftEffect $ Console.log $ "Position Input: " <> positionInput
-    H.modify_ \s -> s { loading = true }
-    result <- liftAff $ fetchAndFilterPlayers positionInput
+    -- H.liftEffect $ Console.log $ "Active Players: " <> show (input)
+  Initialize -> do
+    H.liftEffect $ Console.log "Component initializing..."
+    result <- liftAff fetchPlayers
     case result of
       Left errorMsg -> do
         H.liftEffect $ Console.log $ "Error: " <> errorMsg
         H.modify_ \s -> s { error = Just errorMsg, loading = false }
       Right playersMap -> do
-        let filteredPlayers = filterPlayers positionInput playersMap
-        H.liftEffect $ Console.log $ "Filtered Players: " <> show (Map.size filteredPlayers)
+        H.modify_ \s -> s { players = playersMap, loading = false }
+        H.liftEffect $ Console.log $ "Active Players: " <> show (Map.size playersMap)
 
-  LoadPlayers -> do
+  FilterPlayers -> do
     positionInput <- H.gets _.positionInput
-    H.modify_ \s -> s { loading = true }
-    result <- liftAff $ fetchAndFilterPlayers positionInput
-    case result of
-      Left errorMsg ->
-        H.modify_ \s -> s { error = Just errorMsg, loading = false }
-      Right playersMap ->
-        H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
+    playersMap <- H.gets _.players
+    let filteredPlayers = filterActivePlayers positionInput playersMap
+    H.modify_ \s -> s { players = filteredPlayers }
 
-  SetPlayers result ->
-    case result of
-      Right playersMap ->
-        H.modify_ \s -> s { players = playersMap, loading = false, error = Nothing }
-      Left errorMsg ->
-        H.modify_ \s -> s { error = Just errorMsg, loading = false }
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
-
-maybeElem :: forall w i a. Maybe a -> (a -> HH.HTML w i) -> HH.HTML w i
-maybeElem val f =
-  case val of
-    Just x -> f x
-    Nothing -> HH.text ""
 
 inputField :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
 inputField inputValue = 
   HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
 
-submitButton :: forall m. MonadAff m => Boolean -> H.ComponentHTML Action () m
-submitButton loading = 
-  HH.button [ HP.disabled loading, HE.onClick $ const Submit ] [ HH.text (if loading then "Loading..." else "Load Players") ]
-
-errorDiv :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
-errorDiv errorMsg = HH.div_ [ HH.text errorMsg ]
-
 playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
-playersTable players = HH.div_ $ map renderPlayer $ Map.toUnfoldable players
+playersTable players = 
+  HH.div_ $ map renderPlayer $ Map.toUnfoldable players
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
-renderPlayer (Tuple _ player) = HH.div_ [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
+renderPlayer (Tuple _ player) = 
+  HH.div_ 
+    [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
 
-fetchAndFilterPlayers :: String -> Aff (Either String (Map String Player))
-fetchAndFilterPlayers positionInput = do
+fetchPlayers :: Aff (Either String (Map String Player))
+fetchPlayers = do
   response <- AW.request $ defaultRequest
     { url = "./appData/rosters/activePlayers.json"
     , responseFormat = json
@@ -143,11 +129,14 @@ fetchAndFilterPlayers positionInput = do
       H.liftEffect $ Console.log $ "Raw JSON Response: " <> stringify res.body
       case decodeJson res.body of
         Right (ActivePlayers (PlayersMap playersMap)) -> do
-          let filteredPlayers = filterPlayers positionInput playersMap
-          H.liftEffect $ Console.log $ "Filtered Players: " <> show (Map.size filteredPlayers)
-          pure $ Right filteredPlayers
+          H.liftEffect $ Console.log $ "All Players: " <> show (Map.size playersMap)
+          pure $ Right playersMap
         Left decodeError -> do
           let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
           H.liftEffect $ Console.log errorMsg
           pure $ Left errorMsg
 
+filterActivePlayers :: String -> Map String Player -> Map String Player
+filterActivePlayers positionInput playersMap =
+    if positionInput == "" then playersMap -- If no input, return all players
+    else Map.filter (\player -> player.primaryPosition == positionInput) playersMap

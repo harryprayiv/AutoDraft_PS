@@ -8,7 +8,6 @@ module Player
   , decodeField
   , decodeJsonPlayer
   , decodeJsonPlayerData
-  , filterPlayers
   , unwrapPlayersMap
   )
   where
@@ -38,7 +37,8 @@ type Player =
   { active :: Boolean
   , batSide :: String
   , currentTeam :: Int
-  , playerId :: Int
+  , nameSlug :: String
+  , pitchHand :: String
   , primaryPosition :: String
   , useLastName :: String
   , useName :: String
@@ -81,11 +81,12 @@ decodeJsonPlayer json = do
   obj <- case toObject json of
     Just o -> Right o
     Nothing -> Left $ TypeMismatch "Invalid JSON structure for Player"
-  -- Decode each field using decodeField
+
   active <- decodeField obj "active"
   batSide <- decodeField obj "batSide"
   currentTeam <- decodeField obj "currentTeam"
-  playerId <- decodeField obj "playerId"
+  nameSlug <- decodeField obj "nameSlug"
+  pitchHand <- decodeField obj "pitchHand"
   primaryPosition <- decodeField obj "primaryPosition"
   useLastName <- decodeField obj "useLastName"
   useName <- decodeField obj "useName"
@@ -94,7 +95,8 @@ decodeJsonPlayer json = do
     { active: active
     , batSide: batSide
     , currentTeam: currentTeam
-    , playerId: playerId
+    , nameSlug: nameSlug
+    , pitchHand: pitchHand
     , primaryPosition: primaryPosition
     , useLastName: useLastName
     , useName: useName
@@ -104,10 +106,6 @@ decodeField :: forall a. DecodeJson a => Object Json -> String -> Either JsonDec
 decodeField obj fieldName = case lookup fieldName obj of
   Just value -> decodeJson value
   Nothing -> Left MissingValue
-
-filterPlayers :: String -> Map String Player -> Map String Player
-filterPlayers positionInput players = 
-  Map.filter (\player -> player.primaryPosition == positionInput) players
 
 unwrapPlayersMap :: PlayersMap -> Map String Player
 unwrapPlayersMap (PlayersMap map) = map
