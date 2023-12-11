@@ -29,10 +29,20 @@ import Player (ActivePlayers(..), Player, PlayersMap(..))
 data Query a = GetState (State -> a)
 
 type State = 
-  { players :: Map String Player
+  { allPlayers :: Map String Player
+  , players :: Map String Player
   , positionInput :: String
   , loading :: Boolean
   , error :: Maybe String
+  }
+
+initialState :: State
+initialState = 
+  { allPlayers: Map.empty
+  , players: Map.empty
+  , positionInput: ""
+  , loading: false
+  , error: Nothing
   }
 
 data Action
@@ -52,14 +62,6 @@ component =
         }
     }
 
-initialState :: State
-initialState = 
-  { players: Map.empty
-  , positionInput: ""
-  , loading: false
-  , error: Nothing
-  }
-
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =    
   HH.div_
@@ -78,7 +80,7 @@ handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action
 handleAction = case _ of
   HandleInput input -> 
     H.modify_ \s -> s { positionInput = input }
-    -- H.liftEffect $ Console.log $ "Active Players: " <> show (input)
+
   Initialize -> do
     H.liftEffect $ Console.log "Component initializing..."
     result <- liftAff fetchPlayers
@@ -87,13 +89,13 @@ handleAction = case _ of
         H.liftEffect $ Console.log $ "Error: " <> errorMsg
         H.modify_ \s -> s { error = Just errorMsg, loading = false }
       Right playersMap -> do
-        H.modify_ \s -> s { players = playersMap, loading = false }
+        H.modify_ \s -> s { allPlayers = playersMap, players = playersMap, loading = false }
         H.liftEffect $ Console.log $ "Active Players: " <> show (Map.size playersMap)
 
   FilterPlayers -> do
     positionInput <- H.gets _.positionInput
-    playersMap <- H.gets _.players
-    let filteredPlayers = filterActivePlayers positionInput playersMap
+    allPlayersMap <- H.gets _.allPlayers
+    let filteredPlayers = filterActivePlayers positionInput allPlayersMap
     H.modify_ \s -> s { players = filteredPlayers }
 
   HandleError errorMsg -> 
@@ -110,8 +112,15 @@ playersTable players =
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
   HH.div_ 
-    [ HH.text $ player.useName <> " - Position: " <> player.primaryPosition ]
-
+    [ HH.text $ player.useName 
+      <> " " 
+      <> player.useLastName 
+      <> " | Position: " 
+      <> player.primaryPosition 
+      <> " | Active: " 
+      <> show player.active -- Convert Boolean to String
+    ]
+    
 fetchPlayers :: Aff (Either String (Map String Player))
 fetchPlayers = do
   response <- AW.request $ defaultRequest
