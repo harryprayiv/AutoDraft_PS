@@ -119,6 +119,14 @@ renderPlayer (Tuple _ player) =
       <> player.primaryPosition 
       <> " | Active: " 
       <> show player.active -- Convert Boolean to String
+      <> " | team: " 
+      <> show player.currentTeam -- Convert Int to String
+      <> " | b: " 
+      <> player.batSide
+      <> " | p: " 
+      <> player.pitchHand
+      <> " | id: " 
+      <> player.nameSlug
     ]
     
 fetchPlayers :: Aff (Either String (Map String Player))
