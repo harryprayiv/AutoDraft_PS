@@ -13,6 +13,7 @@ import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
+import Data.Array (sortBy)
 import Data.Either (Either(..))
 import Data.Int as Data.Int
 import Data.Map (Map)
@@ -20,6 +21,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Data.Number
 import Data.Tuple (Tuple(..))
+import Data.Tuple as Data.Tuple
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as Console
@@ -132,7 +134,7 @@ renderPlayer (Tuple _ player) =
       <> player.primaryPosition 
       <> " | Active: " 
       <> show player.active
-      <> " | FPTS: "
+      <> " | 2023 Total: "
       <> (fromMaybe "N/A" (show <$> player.past_fpts))
       <> " | Ranking: "
       <> (fromMaybe "Unranked" (show <$> player.past_ranking))
@@ -180,20 +182,44 @@ fetchRankings = do
 
 mergePlayerData :: Map String Player -> CSV -> Map String Player
 mergePlayerData playersMap csvData =
-  Array.foldl updatePlayerRanking playersMap csvData
+  let
+    updatedPlayersMap = Array.foldl updatePlayerRanking playersMap csvData
+  in
+    sortPlayers updatedPlayersMap
   where
-    updatePlayerRanking acc row =
-      case row of
-        [mlbId, _, _, fptsStr, rankingStr] ->
-          let
-            maybeRanking = parseToInt rankingStr
-            maybeFPTS = Data.Number.fromString fptsStr
-            updatePlayer player = player 
-              { past_ranking = maybeRanking
-              , past_fpts = maybeFPTS
-              }
-          in Map.update (Just <<< updatePlayer) mlbId acc
-        _ -> acc
+    updatePlayerRanking acc row = case row of
+      [mlbId, _, _, fptsStr, rankingStr] ->
+        let
+          maybeRanking = parseToInt rankingStr
+          maybeFPTS = Data.Number.fromString fptsStr
+          updatePlayer player = player 
+            { past_ranking = maybeRanking
+            , past_fpts = maybeFPTS }
+        in Map.update (Just <<< updatePlayer) mlbId acc
+      _ -> acc
+
+    -- parseToInt :: String -> Maybe Int
+    -- parseToInt str = Data.Int.fromString str
+
+sortPlayers :: Map String Player -> Map String Player
+sortPlayers playersMap =
+  let
+    comparePlayers :: Tuple String Player -> Tuple String Player -> Ordering
+    comparePlayers t1 t2 =
+      let
+        ranking1 = (Data.Tuple.snd t1).past_ranking
+        ranking2 = (Data.Tuple.snd t2).past_ranking
+        name1 = (Data.Tuple.snd t1).useName
+        name2 = (Data.Tuple.snd t2).useName
+        compareRanking (Just r1) (Just r2) = compare r1 r2
+        compareRanking (Just _) Nothing = LT
+        compareRanking Nothing (Just _) = GT
+        compareRanking Nothing Nothing = compare name1 name2
+      in
+        compareRanking ranking1 ranking2
+  in
+    Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
+
 
 parseToInt :: String -> Maybe Int
 parseToInt str = Data.Int.fromString str
