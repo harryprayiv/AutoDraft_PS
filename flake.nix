@@ -28,6 +28,8 @@
                     prelude
                     maybe
                     aff
+                    strings
+                    parsing
                     affjax-web
                     arrays
                     web-events
@@ -40,6 +42,7 @@
                     argonaut-codecs
                     ordered-collections
                     halogen-vdom
+                    string-parsers
                   ];
 
                 dir = ./.;

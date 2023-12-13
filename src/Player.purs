@@ -42,6 +42,10 @@ type Player =
   , primaryPosition :: String
   , useLastName :: String
   , useName :: String
+  , past_ranking :: Maybe Int
+  , past_fpts :: Maybe Number
+  , future_fpts :: Maybe Number
+  , future_ranking :: Maybe Int
   }
 
 newtype PlayersMap = PlayersMap (Map String Player)
@@ -91,6 +95,12 @@ decodeJsonPlayer json = do
   useLastName <- decodeField obj "useLastName"
   useName <- decodeField obj "useName"
 
+  -- New fields with Maybe type
+  future_fpts <- decodeOptionalField obj "future_fpts"
+  future_ranking <- decodeOptionalField obj "future_ranking"
+  past_ranking <- decodeOptionalField obj "past_ranking"
+  past_fpts <- decodeOptionalField obj "past_fpts"
+
   pure
     { active: active
     , batSide: batSide
@@ -100,7 +110,17 @@ decodeJsonPlayer json = do
     , primaryPosition: primaryPosition
     , useLastName: useLastName
     , useName: useName
+    , future_fpts: future_fpts
+    , future_ranking: future_ranking
+    , past_ranking: past_ranking
+    , past_fpts: past_fpts
     }
+
+decodeOptionalField :: forall a. DecodeJson a => Object Json -> String -> Either JsonDecodeError (Maybe a)
+decodeOptionalField obj fieldName = case lookup fieldName obj of
+  Just value -> map Just (decodeJson value)
+  Nothing -> Right Nothing
+
 
 decodeField :: forall a. DecodeJson a => Object Json -> String -> Either JsonDecodeError a
 decodeField obj fieldName = case lookup fieldName obj of

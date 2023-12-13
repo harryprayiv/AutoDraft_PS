@@ -4,27 +4,38 @@ module MyComponent
   where
 
 import Prelude
+import StringParser.Parser
 
 import Affjax (defaultRequest)
-import Affjax.ResponseFormat (json)
+import Affjax.ResponseFormat (json, string)
 import Affjax.Web as AW
+import CSVParser (CSV, parseCSV)
+import Control.Monad.Except (runExcept)
+import Control.Monad.List.Trans (foldl)
 import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
+import Data.Array (foldl) as Array
 import Data.Either (Either(..))
+import Data.Int (fromString, toNumber)
+import Data.Int as Data.Int
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (maybe)
+import Data.Number as Data.Number
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as Console
+import Foreign (readInt)
 import Halogen (liftAff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Player (ActivePlayers(..), Player, PlayersMap(..))
+import StringParser (string) as SP
 
 data Query a = GetState (State -> a)
 
@@ -80,17 +91,25 @@ handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action
 handleAction = case _ of
   HandleInput input -> 
     H.modify_ \s -> s { positionInput = input }
-
+  
   Initialize -> do
     H.liftEffect $ Console.log "Component initializing..."
-    result <- liftAff fetchPlayers
-    case result of
-      Left errorMsg -> do
-        H.liftEffect $ Console.log $ "Error: " <> errorMsg
-        H.modify_ \s -> s { error = Just errorMsg, loading = false }
-      Right playersMap -> do
-        H.modify_ \s -> s { allPlayers = playersMap, players = playersMap, loading = false }
-        H.liftEffect $ Console.log $ "Active Players: " <> show (Map.size playersMap)
+    playerResult <- liftAff fetchPlayers
+    rankingResult <- liftAff fetchRankings
+
+    case (playerResult, rankingResult) of
+      (Left playerError, _) -> do
+        H.liftEffect $ Console.log $ "Error fetching player data: " <> playerError
+        H.modify_ \s -> s { error = Just playerError, loading = false }
+
+      (_, Left rankingError) -> do
+        H.liftEffect $ Console.log $ "Error fetching ranking data: " <> rankingError
+        H.modify_ \s -> s { error = Just rankingError, loading = false }
+
+      (Right playersMap, Right rankings) -> do
+        let mergedPlayers = mergePlayerData playersMap rankings
+        H.modify_ \s -> s { allPlayers = mergedPlayers, players = playersMap, loading = false }
+        H.liftEffect $ Console.log "Data successfully initialized and merged"
 
   FilterPlayers -> do
     positionInput <- H.gets _.positionInput
@@ -109,6 +128,7 @@ playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Act
 playersTable players = 
   HH.div_ $ map renderPlayer $ Map.toUnfoldable players
 
+-- Update the renderPlayer function to display rankings and FPTS if available
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
   HH.div_ 
@@ -118,17 +138,13 @@ renderPlayer (Tuple _ player) =
       <> " | Position: " 
       <> player.primaryPosition 
       <> " | Active: " 
-      <> show player.active -- Convert Boolean to String
-      <> " | team: " 
-      <> show player.currentTeam -- Convert Int to String
-      <> " | b: " 
-      <> player.batSide
-      <> " | p: " 
-      <> player.pitchHand
-      <> " | id: " 
-      <> player.nameSlug
+      <> show player.active
+      <> " | FPTS: "
+      <> (fromMaybe "N/A" (show <$> player.past_fpts))
+      <> " | Ranking: "
+      <> (fromMaybe "Unranked" (show <$> player.past_ranking))
     ]
-    
+
 fetchPlayers :: Aff (Either String (Map String Player))
 fetchPlayers = do
   response <- AW.request $ defaultRequest
@@ -157,3 +173,34 @@ filterActivePlayers :: String -> Map String Player -> Map String Player
 filterActivePlayers positionInput playersMap =
     if positionInput == "" then playersMap -- If no input, return all players
     else Map.filter (\player -> player.primaryPosition == positionInput) playersMap
+
+fetchRankings :: Aff (Either String CSV)
+fetchRankings = do
+  response <- AW.request $ defaultRequest 
+    { url = "./appData/rosters/2023_Rankings.csv"
+    , responseFormat = string 
+    }
+
+  case response of
+    Left err -> pure $ Left $ AW.printError err
+    Right res -> pure $ Right $ parseCSV res.body
+
+mergePlayerData :: Map String Player -> CSV -> Map String Player
+mergePlayerData playersMap csvData =
+  Array.foldl updatePlayerRanking playersMap csvData
+  where
+    updatePlayerRanking acc row =
+      case row of
+        [mlbId, _, _, fptsStr, rankingStr] ->
+          let
+            maybeRanking = parseToInt rankingStr
+            maybeFPTS = Data.Number.fromString fptsStr
+            updatePlayer player = player 
+              { past_ranking = maybeRanking
+              , past_fpts = maybeFPTS
+              }
+          in Map.update (Just <<< updatePlayer) mlbId acc
+        _ -> acc
+
+parseToInt :: String -> Maybe Int
+parseToInt str = Data.Int.fromString str
