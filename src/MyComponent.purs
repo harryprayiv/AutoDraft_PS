@@ -4,38 +4,31 @@ module MyComponent
   where
 
 import Prelude
-import StringParser.Parser
 
 import Affjax (defaultRequest)
 import Affjax.ResponseFormat (json, string)
 import Affjax.Web as AW
 import CSVParser (CSV, parseCSV)
-import Control.Monad.Except (runExcept)
-import Control.Monad.List.Trans (foldl)
 import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
 import Data.Either (Either(..))
-import Data.Int (fromString, toNumber)
 import Data.Int as Data.Int
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Maybe (maybe)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Data.Number
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as Console
-import Foreign (readInt)
 import Halogen (liftAff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Player (ActivePlayers(..), Player, PlayersMap(..))
-import StringParser (string) as SP
 
 data Query a = GetState (State -> a)
 
@@ -97,16 +90,16 @@ handleAction = case _ of
     playerResult <- liftAff fetchPlayers
     rankingResult <- liftAff fetchRankings
 
-    case (playerResult, rankingResult) of
-      (Left playerError, _) -> do
+    case Tuple playerResult rankingResult of
+      Tuple (Left playerError) _ -> do
         H.liftEffect $ Console.log $ "Error fetching player data: " <> playerError
         H.modify_ \s -> s { error = Just playerError, loading = false }
 
-      (_, Left rankingError) -> do
+      Tuple _ (Left rankingError) -> do
         H.liftEffect $ Console.log $ "Error fetching ranking data: " <> rankingError
         H.modify_ \s -> s { error = Just rankingError, loading = false }
 
-      (Right playersMap, Right rankings) -> do
+      Tuple (Right playersMap) (Right rankings) -> do
         let mergedPlayers = mergePlayerData playersMap rankings
         H.modify_ \s -> s { allPlayers = mergedPlayers, players = playersMap, loading = false }
         H.liftEffect $ Console.log "Data successfully initialized and merged"
