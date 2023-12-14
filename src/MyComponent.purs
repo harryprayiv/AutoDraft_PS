@@ -20,12 +20,11 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Data.Number
-import Data.Tuple (Tuple(..))
-import Data.Tuple as Data.Tuple
-import Effect.Aff (Aff)
+import Data.Tuple (Tuple(..), snd)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as Console
 import Halogen (liftAff)
+import Effect.Aff (Aff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -82,11 +81,45 @@ render state =
     , playersTable state.players
     ]
 
+-- handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
+-- handleAction = case _ of
+--   HandleInput input -> 
+--     H.modify_ \s -> s { positionInput = input }
+
+--   Initialize -> do
+--     H.liftEffect $ Console.log "Component initializing..."
+--     playerResult <- liftAff fetchPlayers
+--     rankingResult <- liftAff fetchRankings
+
+--     case Tuple playerResult rankingResult of
+--       Tuple (Left playerError) _ -> do
+--         H.liftEffect $ Console.log $ "Error fetching player data: " <> playerError
+--         H.modify_ \s -> s { error = Just playerError, loading = false }
+
+--       Tuple _ (Left rankingError) -> do
+--         H.liftEffect $ Console.log $ "Error fetching ranking data: " <> rankingError
+--         H.modify_ \s -> s { error = Just rankingError, loading = false }
+
+--       Tuple (Right playersMap) (Right rankings) -> do
+--         let mergedAndSortedPlayers = sortPlayers $ mergePlayerData playersMap rankings
+--         H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
+--         H.liftEffect $ Console.log "Data successfully initialized, merged, and sorted"
+
+--   FilterPlayers -> do
+--     positionInput <- H.gets _.positionInput
+--     allPlayersMap <- H.gets _.allPlayers
+--     let filteredPlayers = filterActivePlayers positionInput allPlayersMap
+--     let sortedFilteredPlayers = sortPlayers filteredPlayers
+--     H.modify_ \s -> s { players = sortedFilteredPlayers }
+
+--   HandleError errorMsg -> 
+--     H.modify_ \s -> s { error = Just errorMsg, loading = false }
+
 handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
 handleAction = case _ of
   HandleInput input -> 
     H.modify_ \s -> s { positionInput = input }
-  
+
   Initialize -> do
     H.liftEffect $ Console.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
@@ -102,18 +135,20 @@ handleAction = case _ of
         H.modify_ \s -> s { error = Just rankingError, loading = false }
 
       Tuple (Right playersMap) (Right rankings) -> do
-        let mergedPlayers = mergePlayerData playersMap rankings
-        H.modify_ \s -> s { allPlayers = mergedPlayers, players = playersMap, loading = false }
-        H.liftEffect $ Console.log "Data successfully initialized and merged"
+        let mergedAndSortedPlayers = sortPlayers $ mergePlayerData playersMap rankings
+        H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
+        H.liftEffect $ Console.log "Data successfully initialized, merged, and sorted"
 
   FilterPlayers -> do
     positionInput <- H.gets _.positionInput
     allPlayersMap <- H.gets _.allPlayers
     let filteredPlayers = filterActivePlayers positionInput allPlayersMap
-    H.modify_ \s -> s { players = filteredPlayers }
+    let sortedFilteredPlayers = sortPlayers filteredPlayers
+    H.modify_ \s -> s { players = sortedFilteredPlayers }
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
+
 
 inputField :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
 inputField inputValue = 
@@ -180,17 +215,14 @@ fetchRankings = do
     Left err -> pure $ Left $ AW.printError err
     Right res -> pure $ Right $ parseCSV res.body
 
+-- Ensure this function is parsing the ranking and FPTS correctly
 mergePlayerData :: Map String Player -> CSV -> Map String Player
-mergePlayerData playersMap csvData =
-  let
-    updatedPlayersMap = Array.foldl updatePlayerRanking playersMap csvData
-  in
-    sortPlayers updatedPlayersMap
+mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
   where
     updatePlayerRanking acc row = case row of
-      [mlbId, _, _, fptsStr, rankingStr] ->
+      [mlbId, _, _, fptsStr, rankingStr] -> 
         let
-          maybeRanking = parseToInt rankingStr
+          maybeRanking = Data.Number.fromString rankingStr
           maybeFPTS = Data.Number.fromString fptsStr
           updatePlayer player = player 
             { past_ranking = maybeRanking
@@ -198,19 +230,16 @@ mergePlayerData playersMap csvData =
         in Map.update (Just <<< updatePlayer) mlbId acc
       _ -> acc
 
-    -- parseToInt :: String -> Maybe Int
-    -- parseToInt str = Data.Int.fromString str
-
 sortPlayers :: Map String Player -> Map String Player
 sortPlayers playersMap =
   let
     comparePlayers :: Tuple String Player -> Tuple String Player -> Ordering
     comparePlayers t1 t2 =
       let
-        ranking1 = (Data.Tuple.snd t1).past_ranking
-        ranking2 = (Data.Tuple.snd t2).past_ranking
-        name1 = (Data.Tuple.snd t1).useName
-        name2 = (Data.Tuple.snd t2).useName
+        ranking1 = (snd t1).past_ranking
+        ranking2 = (snd t2).past_ranking
+        name1 = (snd t1).useName
+        name2 = (snd t2).useName
         compareRanking (Just r1) (Just r2) = compare r1 r2
         compareRanking (Just _) Nothing = LT
         compareRanking Nothing (Just _) = GT
