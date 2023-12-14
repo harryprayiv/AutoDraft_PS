@@ -51,10 +51,10 @@ initialState =
   }
 
 data Action
-  = HandleInput String
+  = FilterByPosition String
   | Initialize
-  | FilterPlayers
   | HandleError String
+
 
 component :: forall q i o m. MonadAff m => H.Component q i o m
 component =
@@ -71,54 +71,34 @@ render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =    
   HH.div_
     [ HH.div_ 
-      [ inputField state.positionInput,
-        HH.button 
-          [ HE.onClick $ const FilterPlayers
-          , HP.disabled state.loading
-          ] 
-          [ HH.text (if state.loading then "Loading..." else "Filter Players") ]
-      ]
+        [ positionButton state.loading "P" "1"
+        , positionButton state.loading "C" "2"
+        , positionButton state.loading "1B" "3"
+        , positionButton state.loading "2B" "4"
+        , positionButton state.loading "3B" "5"
+        , positionButton state.loading "SS" "6"
+        , positionButton state.loading "LF" "7"
+        , positionButton state.loading "CF" "8"
+        , positionButton state.loading "RF" "9"
+        , positionButton state.loading "DH" "10"
+        , positionButton state.loading "O" "O"
+        , positionButton state.loading "Shohei" "Y"
+        ]
     , playersTable state.players
     ]
-
--- handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
--- handleAction = case _ of
---   HandleInput input -> 
---     H.modify_ \s -> s { positionInput = input }
-
---   Initialize -> do
---     H.liftEffect $ Console.log "Component initializing..."
---     playerResult <- liftAff fetchPlayers
---     rankingResult <- liftAff fetchRankings
-
---     case Tuple playerResult rankingResult of
---       Tuple (Left playerError) _ -> do
---         H.liftEffect $ Console.log $ "Error fetching player data: " <> playerError
---         H.modify_ \s -> s { error = Just playerError, loading = false }
-
---       Tuple _ (Left rankingError) -> do
---         H.liftEffect $ Console.log $ "Error fetching ranking data: " <> rankingError
---         H.modify_ \s -> s { error = Just rankingError, loading = false }
-
---       Tuple (Right playersMap) (Right rankings) -> do
---         let mergedAndSortedPlayers = sortPlayers $ mergePlayerData playersMap rankings
---         H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
---         H.liftEffect $ Console.log "Data successfully initialized, merged, and sorted"
-
---   FilterPlayers -> do
---     positionInput <- H.gets _.positionInput
---     allPlayersMap <- H.gets _.allPlayers
---     let filteredPlayers = filterActivePlayers positionInput allPlayersMap
---     let sortedFilteredPlayers = sortPlayers filteredPlayers
---     H.modify_ \s -> s { players = sortedFilteredPlayers }
-
---   HandleError errorMsg -> 
---     H.modify_ \s -> s { error = Just errorMsg, loading = false }
+    
+positionButton :: forall m. MonadAff m => Boolean -> String -> String -> H.ComponentHTML Action () m
+positionButton loading displayName positionCode = 
+  HH.button 
+    [ HE.onClick $ const $ FilterByPosition positionCode
+    , HP.disabled loading
+    ] 
+    [ HH.text displayName ]
 
 handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
 handleAction = case _ of
-  HandleInput input -> 
-    H.modify_ \s -> s { positionInput = input }
+  -- HandleInput input -> 
+  --   H.modify_ \s -> s { positionInput = input }
 
   Initialize -> do
     H.liftEffect $ Console.log "Component initializing..."
@@ -139,10 +119,9 @@ handleAction = case _ of
         H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
         H.liftEffect $ Console.log "Data successfully initialized, merged, and sorted"
 
-  FilterPlayers -> do
-    positionInput <- H.gets _.positionInput
+  FilterByPosition position -> do
     allPlayersMap <- H.gets _.allPlayers
-    let filteredPlayers = filterActivePlayers positionInput allPlayersMap
+    let filteredPlayers = filterActivePlayers position allPlayersMap
     let sortedFilteredPlayers = sortPlayers filteredPlayers
     H.modify_ \s -> s { players = sortedFilteredPlayers }
 
@@ -150,9 +129,9 @@ handleAction = case _ of
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
 
-inputField :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
-inputField inputValue = 
-  HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
+-- inputField :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
+-- inputField inputValue = 
+--   HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
 
 playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
 playersTable players = 
