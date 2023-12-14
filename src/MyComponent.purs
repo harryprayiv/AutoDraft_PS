@@ -144,6 +144,12 @@ renderPlayer (Tuple _ player) =
     [ HH.text $ player.useName 
       <> " " 
       <> player.useLastName 
+      <> " | Team: " 
+      <> show player.currentTeam 
+      <> " | PitchHand: " 
+      <> player.pitchHand 
+      <> " | Batside: " 
+      <> player.batSide 
       <> " | Position: " 
       <> player.primaryPosition 
       <> " | Active: " 
@@ -153,6 +159,7 @@ renderPlayer (Tuple _ player) =
       <> " | Ranking: "
       <> (fromMaybe "Unranked" (show <$> player.past_ranking))
     ]
+
 
 fetchPlayers :: Aff (Either String (Map String Player))
 fetchPlayers = do
