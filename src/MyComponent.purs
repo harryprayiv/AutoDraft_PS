@@ -98,9 +98,6 @@ positionButton loading displayName positionCode =
 
 handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
 handleAction = case _ of
-  -- HandleInput input -> 
-  --   H.modify_ \s -> s { positionInput = input }
-
   Initialize -> do
     H.liftEffect $ Console.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
@@ -133,7 +130,6 @@ playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Act
 playersTable players = 
   HH.div_ $ map renderPlayer $ Map.toUnfoldable players
 
--- Update the renderPlayer function to display rankings and FPTS if available
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
   HH.div_ 
@@ -152,14 +148,9 @@ renderPlayer (Tuple _ player) =
       <> show player.active
       <> " | 2023 Total: "
       <> (fromMaybe "N/A" (show <$> player.past_fpts))
-      -- <> " | Ranking: "
-      -- <> (fromMaybe "Unranked" (show <$> player.past_ranking))
       <> " | Ranking: "
-      <> case player.past_ranking of
-           Just ranking -> show ranking
-           Nothing -> "Unranked"
+      <> (fromMaybe "Unranked" (show <$> player.past_ranking))
     ]
-
 
 fetchPlayers :: Aff (Either String (Map String Player))
 fetchPlayers = do
@@ -201,15 +192,14 @@ fetchRankings = do
     Left err -> pure $ Left $ AW.printError err
     Right res -> pure $ Right $ parseCSV res.body
 
--- Ensure this function is parsing the ranking and FPTS correctly
 mergePlayerData :: Map String Player -> CSV -> Map String Player
 mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
   where
     updatePlayerRanking acc row = case row of
       [mlbId, _, _, fptsStr, rankingStr] ->
         let
-          maybeRanking = DI.fromString rankingStr -- Parse ranking as Maybe Int
-          maybeFPTS = DN.fromString fptsStr -- Parse fpts as Maybe Number
+          maybeRanking = DI.fromString rankingStr
+          maybeFPTS = DN.fromString fptsStr 
           updatePlayer player = player
             { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
             , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
@@ -234,6 +224,3 @@ sortPlayers playersMap =
         compareRanking ranking1 ranking2
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
-
--- parseToInt :: String -> Maybe Int
--- parseToInt str = Data.Int.fromString str
