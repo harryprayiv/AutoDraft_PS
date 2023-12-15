@@ -42,10 +42,10 @@ type Player =
   , primaryPosition :: String
   , useLastName :: String
   , useName :: String
-  , past_ranking :: Maybe Number
+  , past_ranking :: Maybe Int
   , past_fpts :: Maybe Number
   , future_fpts :: Maybe Number
-  , future_ranking :: Maybe Number
+  , future_ranking :: Maybe Int
   }
 
 newtype PlayersMap = PlayersMap (Map String Player)

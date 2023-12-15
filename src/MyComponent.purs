@@ -15,16 +15,16 @@ import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
 import Data.Array (sortBy)
 import Data.Either (Either(..))
-import Data.Int as Data.Int
+import Data.Int as DI
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Number as Data.Number
+import Data.Maybe (Maybe(..), fromMaybe, isNothing)
+import Data.Number as DN
 import Data.Tuple (Tuple(..), snd)
+import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as Console
 import Halogen (liftAff)
-import Effect.Aff (Aff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -71,7 +71,8 @@ render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =    
   HH.div_
     [ HH.div_ 
-        [ positionButton state.loading "P" "1"
+        [ positionButton state.loading "All" ""
+        , positionButton state.loading "P" "1"
         , positionButton state.loading "C" "2"
         , positionButton state.loading "1B" "3"
         , positionButton state.loading "2B" "4"
@@ -128,11 +129,6 @@ handleAction = case _ of
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
-
--- inputField :: forall m. MonadAff m => String -> H.ComponentHTML Action () m
--- inputField inputValue = 
---   HH.input [ HP.type_ HP.InputText, HP.value inputValue, HE.onValueInput HandleInput ]
-
 playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
 playersTable players = 
   HH.div_ $ map renderPlayer $ Map.toUnfoldable players
@@ -156,8 +152,12 @@ renderPlayer (Tuple _ player) =
       <> show player.active
       <> " | 2023 Total: "
       <> (fromMaybe "N/A" (show <$> player.past_fpts))
+      -- <> " | Ranking: "
+      -- <> (fromMaybe "Unranked" (show <$> player.past_ranking))
       <> " | Ranking: "
-      <> (fromMaybe "Unranked" (show <$> player.past_ranking))
+      <> case player.past_ranking of
+           Just ranking -> show ranking
+           Nothing -> "Unranked"
     ]
 
 
@@ -206,13 +206,13 @@ mergePlayerData :: Map String Player -> CSV -> Map String Player
 mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
   where
     updatePlayerRanking acc row = case row of
-      [mlbId, _, _, fptsStr, rankingStr] -> 
+      [mlbId, _, _, fptsStr, rankingStr] ->
         let
-          maybeRanking = Data.Number.fromString rankingStr
-          maybeFPTS = Data.Number.fromString fptsStr
-          updatePlayer player = player 
-            { past_ranking = maybeRanking
-            , past_fpts = maybeFPTS }
+          maybeRanking = DI.fromString rankingStr -- Parse ranking as Maybe Int
+          maybeFPTS = DN.fromString fptsStr -- Parse fpts as Maybe Number
+          updatePlayer player = player
+            { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
+            , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
         in Map.update (Just <<< updatePlayer) mlbId acc
       _ -> acc
 
@@ -235,6 +235,5 @@ sortPlayers playersMap =
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
 
-
-parseToInt :: String -> Maybe Int
-parseToInt str = Data.Int.fromString str
+-- parseToInt :: String -> Maybe Int
+-- parseToInt str = Data.Int.fromString str
