@@ -1,6 +1,6 @@
 module CSVParser
-  ( CSV
-  , parseCSV
+  ( RankingCSV
+  , parseRankingCSV
   )
   where
 
@@ -8,10 +8,10 @@ import Prelude
 import Data.String (Pattern(..))
 import Data.String.Common (split)
 
-type CSV = Array (Array String)
+type RankingCSV = Array (Array String)
 
-parseCSV :: String -> CSV
-parseCSV content =
+parseRankingCSV :: String -> RankingCSV
+parseRankingCSV content =
   let
     rows = split (Pattern "\n") content
     fields = map (split (Pattern ",")) rows

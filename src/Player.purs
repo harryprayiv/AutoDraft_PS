@@ -95,7 +95,6 @@ decodeJsonPlayer json = do
   useLastName <- decodeField obj "useLastName"
   useName <- decodeField obj "useName"
 
-  -- New fields with Maybe type
   future_fpts <- decodeOptionalField obj "future_fpts"
   future_ranking <- decodeOptionalField obj "future_ranking"
   past_ranking <- decodeOptionalField obj "past_ranking"
@@ -120,7 +119,6 @@ decodeOptionalField :: forall a. DecodeJson a => Object Json -> String -> Either
 decodeOptionalField obj fieldName = case lookup fieldName obj of
   Just value -> map Just (decodeJson value)
   Nothing -> Right Nothing
-
 
 decodeField :: forall a. DecodeJson a => Object Json -> String -> Either JsonDecodeError a
 decodeField obj fieldName = case lookup fieldName obj of
