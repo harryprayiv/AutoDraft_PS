@@ -43,6 +43,8 @@
                     ordered-collections
                     halogen-vdom
                     string-parsers
+                    css
+                    halogen-css
                   ];
 
                 dir = ./.;
