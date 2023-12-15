@@ -15,6 +15,7 @@ import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
 import Data.Array (sortBy)
 import Data.Either (Either(..))
+import Data.Int (trunc)
 import Data.Int as DI
 import Data.Map (Map)
 import Data.Map as Map
@@ -165,10 +166,13 @@ renderPlayer (Tuple _ player) =
       <> " | Active: " 
       <> show player.active
       <> " | '23 Total: "
-      <> (fromMaybe "N/A" (show <$> player.past_fpts))
+      <> (fromMaybe "N/A" (showAsInt <$> player.past_fpts))
       <> " | '23 Rank: "
       <> (fromMaybe "Unranked" (show <$> player.past_ranking))
     ]
+
+showAsInt :: Number -> String
+showAsInt num = show $ trunc num
 
 fetchPlayers :: Aff (Either String (Map String Player))
 fetchPlayers = do
