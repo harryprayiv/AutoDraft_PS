@@ -217,7 +217,7 @@ fetchPlayers = do
 
 filterActivePlayers :: String -> Map String Player -> Map String Player
 filterActivePlayers positionInput playersMap =
-    if positionInput == "" then playersMap -- If no input, return all players
+    if positionInput == "" then playersMap
     else Map.filter (\player -> player.primaryPosition == positionInput) playersMap
 
 fetchRankings :: Aff (Either String RankingCSV)
