@@ -36,7 +36,7 @@ data Query a = GetState (State -> a)
 type SortOption = String
 
 sortOptions :: Array SortOption
-sortOptions = ["Name", "Ranking", "Total Points"]
+sortOptions = ["Name", "'23 Rank", "'23 Points"]
 
 type State = 
   { allPlayers :: Map String Player
@@ -164,9 +164,9 @@ renderPlayer (Tuple _ player) =
       <> player.primaryPosition 
       <> " | Active: " 
       <> show player.active
-      <> " | 2023 Total: "
+      <> " | '23 Total: "
       <> (fromMaybe "N/A" (show <$> player.past_fpts))
-      <> " | Ranking: "
+      <> " | '23 Rank: "
       <> (fromMaybe "Unranked" (show <$> player.past_ranking))
     ]
 
@@ -217,7 +217,7 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
       [mlbId, _, _, fptsStr, rankingStr] ->
         let
           maybeRanking = DI.fromString rankingStr
-          maybeFPTS = DN.fromString fptsStr 
+          maybeFPTS = DN.fromString fptsStr
           updatePlayer player = player
             { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
             , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
@@ -229,8 +229,8 @@ sortPlayersBySelectedOption sortOption = do
   currentPlayersMap <- H.gets _.players
   let sortedPlayers = case sortOption of
         "Name" -> sortPlayersBy (\p -> p.useLastName <> " " <> p.useName) currentPlayersMap
-        "Ranking" -> sortPlayersBy (fromMaybe 0 <<< _.past_ranking) currentPlayersMap
-        "Total Points" -> sortPlayersBy (fromMaybe 0.0 <<< _.past_fpts) currentPlayersMap
+        "'23 Rank" -> sortPlayersBy (fromMaybe 0 <<< _.past_ranking) currentPlayersMap
+        "'23 Points" -> sortPlayersBy (fromMaybe 0.0 <<< _.past_fpts) currentPlayersMap
         _ -> currentPlayersMap
   H.modify_ \s -> s { players = sortedPlayers }
 
@@ -241,7 +241,6 @@ sortPlayersBy f playersMap =
     comparePlayers t1 t2 = compare (f $ snd t1) (f $ snd t2)
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
-
 
 sortPlayers :: Map String Player -> Map String Player
 sortPlayers playersMap =
