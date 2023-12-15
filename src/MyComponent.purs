@@ -74,27 +74,6 @@ component =
         }
     }
 
--- render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
--- render state =    
---   HH.div_
---     [ HH.div_ 
---         [ positionButton state.loading "All" ""
---         , positionButton state.loading "P" "1"
---         , positionButton state.loading "C" "2"
---         , positionButton state.loading "1B" "3"
---         , positionButton state.loading "2B" "4"
---         , positionButton state.loading "3B" "5"
---         , positionButton state.loading "SS" "6"
---         , positionButton state.loading "LF" "7"
---         , positionButton state.loading "CF" "8"
---         , positionButton state.loading "RF" "9"
---         , positionButton state.loading "DH" "10"
---         , positionButton state.loading "O" "O"
---         , positionButton state.loading "Shohei" "Y"
---         ]
---     , playersTable state.players
---     ]
-
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =    
   HH.div_
