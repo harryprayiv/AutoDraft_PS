@@ -39,6 +39,7 @@ type Player =
   , currentTeam :: Int
   , nameSlug :: String
   , pitchHand :: String
+  , playerId :: Int
   , primaryPosition :: String
   , useLastName :: String
   , useName :: String
@@ -91,6 +92,7 @@ decodeJsonPlayer json = do
   currentTeam <- decodeField obj "currentTeam"
   nameSlug <- decodeField obj "nameSlug"
   pitchHand <- decodeField obj "pitchHand"
+  playerId <- decodeField obj "playerId"
   primaryPosition <- decodeField obj "primaryPosition"
   useLastName <- decodeField obj "useLastName"
   useName <- decodeField obj "useName"
@@ -106,6 +108,7 @@ decodeJsonPlayer json = do
     , currentTeam: currentTeam
     , nameSlug: nameSlug
     , pitchHand: pitchHand
+    , playerId: playerId
     , primaryPosition: primaryPosition
     , useLastName: useLastName
     , useName: useName

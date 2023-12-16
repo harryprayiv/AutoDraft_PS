@@ -4,38 +4,38 @@ module MyComponent
   where
 
 import Prelude
+
 import Affjax (defaultRequest)
 import Affjax.ResponseFormat (json, string)
+import Affjax.Web as AW
+import CSS.Border as Border
+import CSS.Color as Color
+import CSS.Geometry (paddingBottom, paddingLeft, paddingRight, paddingTop) as CSS
+import CSS.Size as Size
 import CSS.Stylesheet (CSS)
 import CSVParser (RankingCSV, parseRankingCSV)
 import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
+import Data.Array (foldl) as Array
 import Data.Array (sortBy)
 import Data.Either (Either(..))
 import Data.Int (trunc)
+import Data.Int as DI
 import Data.Map (Map)
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
+import Data.Number as DN
 import Data.Tuple (Tuple(..), snd)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
-import Halogen (liftAff)
-import Data.Map as Map
-import Data.Number as DN
-import Data.Array (foldl) as Array
-import Data.Int as DI
-import Affjax.Web as AW
-import CSS.Border as Border
-import CSS.Color as Color
-import CSS.Size as Size
 import Effect.Console as DEBUG
+import Halogen (liftAff)
 import Halogen as H
 import Halogen.HTML as HH
-import Halogen.HTML.CSS as CSS
+import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-
-
 import Player (ActivePlayers(..), Player, PlayersMap(..))
 
 data Query a = GetState (State -> a)
@@ -44,6 +44,35 @@ type SortOption = String
 
 sortOptions :: Array SortOption
 sortOptions = ["Name", "'23 Rank", "'23 Points"]
+
+
+type PositionOption = Tuple String String -- (Display Name, Position Code)
+
+positionOptions :: Array PositionOption
+positionOptions = 
+  [ Tuple "All" ""
+  , Tuple "P" "1"
+  , Tuple "C" "2"
+  , Tuple "1B" "3"
+  , Tuple "2B" "4"
+  , Tuple "3B" "5"
+  , Tuple "SS" "6"
+  , Tuple "LF" "7"
+  , Tuple "CF" "8"
+  , Tuple "RF" "9"
+  , Tuple "DH" "10"
+  , Tuple "O" "O"
+  , Tuple "Shohei" "Y"
+  ]
+
+positionDropdown :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
+positionDropdown state = 
+  HH.select
+    [ HE.onValueInput (FilterByPosition) ]
+    $ map (\(Tuple displayName positionCode) -> HH.option
+           [ HP.value positionCode
+           , HP.selected $ positionCode == state.positionInput
+           ] [ HH.text displayName ]) positionOptions
 
 type State = 
   { allPlayers :: Map String Player
@@ -59,7 +88,7 @@ initialState =
   { allPlayers: Map.empty
   , players: Map.empty
   , positionInput: ""
-  , currentSort: "Name" -- Default sort option
+  , currentSort: "Name"
   , loading: false
   , error: Nothing
   }
@@ -84,19 +113,7 @@ component =
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =    
   HH.div_
-    [ positionButton state.loading "All" ""
-    , positionButton state.loading "P" "1"
-    , positionButton state.loading "C" "2"
-    , positionButton state.loading "1B" "3"
-    , positionButton state.loading "2B" "4"
-    , positionButton state.loading "3B" "5"
-    , positionButton state.loading "SS" "6"
-    , positionButton state.loading "LF" "7"
-    , positionButton state.loading "CF" "8"
-    , positionButton state.loading "RF" "9"
-    , positionButton state.loading "DH" "10"
-    , positionButton state.loading "O" "O"
-    , positionButton state.loading "Shohei" "Y"
+    [ positionDropdown state
     , sortDropdown state.currentSort
     , playersTable state.players
     ]
@@ -110,14 +127,6 @@ sortDropdown currentSort =
                       , HP.selected $ option == currentSort
                       ] [ HH.text option ]) sortOptions
 
-positionButton :: forall m. MonadAff m => Boolean -> String -> String -> H.ComponentHTML Action () m
-positionButton loading displayName positionCode = 
-  HH.button 
-    [ HE.onClick $ const $ FilterByPosition positionCode
-    , HP.disabled loading
-    ] 
-    [ HH.text displayName ]
-
 handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
 handleAction = case _ of
   ChangeSort newSort -> do
@@ -127,6 +136,7 @@ handleAction = case _ of
     H.liftEffect $ DEBUG.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
     rankingResult <- liftAff fetchRankings
+    H.liftEffect $ DEBUG.log $ "Parsed Rankings: " <> show rankingResult
 
     case Tuple playerResult rankingResult of
       Tuple (Left playerError) _ -> do
@@ -152,14 +162,22 @@ handleAction = case _ of
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
 
+columnNames :: Array String
+columnNames = ["MLB_ID", "First", "Last", "Team", "Pitch", "Bat", "Pos", "Active", "'23 Rank", "'23 Points", "NameSlug"]
+
 cellStyle :: CSS
 cellStyle = do
   Border.border Border.solid (Size.px 1.0) Color.black
+  CSS.paddingTop (Size.px 0.4)
+  CSS.paddingBottom (Size.px 0.4)
+  CSS.paddingLeft (Size.px 5.0)
+  CSS.paddingRight (Size.px 5.0)
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
   HH.tr_
-    [ HH.td [CSS.style cellStyle] [HH.text player.useName]
+    [ HH.td [ CSS.style cellStyle ] [ HH.text $ show player.playerId ]
+    , HH.td [CSS.style cellStyle] [HH.text player.useName]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.useLastName ]
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.currentTeam ]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.pitchHand ]
@@ -168,12 +186,14 @@ renderPlayer (Tuple _ player) =
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "Unranked" show player.past_ranking ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" showAsInt player.past_fpts ]  
+    , HH.td [ CSS.style cellStyle ] [ HH.text player.nameSlug ] 
     ]
 
 playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
 playersTable players = 
   HH.table_
-    [ HH.thead_ [ HH.tr_ [ HH.th_ [HH.text "Header Name"] ] ]
+    [ HH.thead_ 
+        [ HH.tr_ $ map (\name -> HH.th_ [HH.text name]) columnNames ]
     , HH.tbody_ $ map renderPlayer $ Map.toUnfoldable players
     ]
 
@@ -228,11 +248,13 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
         let
           maybeRanking = DI.fromString rankingStr
           maybeFPTS = DN.fromString fptsStr
-          updatePlayer player = player
-            { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
-            , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
-        in Map.update (Just <<< updatePlayer) mlbId acc
+        in Map.update (updatePlayer maybeRanking maybeFPTS) mlbId acc
       _ -> acc
+
+    updatePlayer :: Maybe Int -> Maybe Number -> Player -> Maybe Player
+    updatePlayer maybeRanking maybeFPTS player = Just $ player
+      { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
+      , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
 
 sortPlayersBySelectedOption :: forall output m. MonadAff m => SortOption -> H.HalogenM State Action () output m Unit
 sortPlayersBySelectedOption sortOption = do
