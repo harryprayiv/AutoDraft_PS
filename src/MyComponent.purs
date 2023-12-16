@@ -4,32 +4,38 @@ module MyComponent
   where
 
 import Prelude
-
 import Affjax (defaultRequest)
 import Affjax.ResponseFormat (json, string)
-import Affjax.Web as AW
+import CSS.Stylesheet (CSS)
 import CSVParser (RankingCSV, parseRankingCSV)
 import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
-import Data.Array (foldl) as Array
 import Data.Array (sortBy)
 import Data.Either (Either(..))
 import Data.Int (trunc)
-import Data.Int as DI
 import Data.Map (Map)
-import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, isNothing)
-import Data.Number as DN
+import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
 import Data.Tuple (Tuple(..), snd)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
-import Effect.Console as Console
 import Halogen (liftAff)
+import Data.Map as Map
+import Data.Number as DN
+import Data.Array (foldl) as Array
+import Data.Int as DI
+import Affjax.Web as AW
+import CSS.Border as Border
+import CSS.Color as Color
+import CSS.Size as Size
+import Effect.Console as DEBUG
 import Halogen as H
 import Halogen.HTML as HH
+import Halogen.HTML.CSS as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+
+
 import Player (ActivePlayers(..), Player, PlayersMap(..))
 
 data Query a = GetState (State -> a)
@@ -118,23 +124,23 @@ handleAction = case _ of
     H.modify_ \s -> s { currentSort = newSort }
     sortPlayersBySelectedOption newSort
   Initialize -> do
-    H.liftEffect $ Console.log "Component initializing..."
+    H.liftEffect $ DEBUG.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
     rankingResult <- liftAff fetchRankings
 
     case Tuple playerResult rankingResult of
       Tuple (Left playerError) _ -> do
-        H.liftEffect $ Console.log $ "Error fetching player data: " <> playerError
+        H.liftEffect $ DEBUG.log $ "Error fetching player data: " <> playerError
         H.modify_ \s -> s { error = Just playerError, loading = false }
 
       Tuple _ (Left rankingError) -> do
-        H.liftEffect $ Console.log $ "Error fetching ranking data: " <> rankingError
+        H.liftEffect $ DEBUG.log $ "Error fetching ranking data: " <> rankingError
         H.modify_ \s -> s { error = Just rankingError, loading = false }
 
       Tuple (Right playersMap) (Right rankings) -> do
         let mergedAndSortedPlayers = sortPlayers $ mergePlayerData playersMap rankings
         H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
-        H.liftEffect $ Console.log "Data successfully initialized, merged, and sorted"
+        H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
 
   FilterByPosition position -> do
     allPlayersMap <- H.gets _.allPlayers
@@ -145,30 +151,30 @@ handleAction = case _ of
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
-playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
-playersTable players = 
-  HH.div_ $ map renderPlayer $ Map.toUnfoldable players
+
+cellStyle :: CSS
+cellStyle = do
+  Border.border Border.solid (Size.px 1.0) Color.black
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
-  HH.div_ 
-    [ HH.text $ player.useName 
-      <> " " 
-      <> player.useLastName 
-      <> " | Team: " 
-      <> show player.currentTeam 
-      <> " | PitchHand: " 
-      <> player.pitchHand 
-      <> " | Batside: " 
-      <> player.batSide 
-      <> " | Position: " 
-      <> player.primaryPosition 
-      <> " | Active: " 
-      <> show player.active
-      <> " | '23 Total: "
-      <> (fromMaybe "N/A" (showAsInt <$> player.past_fpts))
-      <> " | '23 Rank: "
-      <> (fromMaybe "Unranked" (show <$> player.past_ranking))
+  HH.tr_
+    [ HH.td [CSS.style cellStyle] [HH.text player.useName]
+    , HH.td [ CSS.style cellStyle ] [ HH.text player.useLastName ]
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.currentTeam ]
+    , HH.td [ CSS.style cellStyle ] [ HH.text player.pitchHand ]
+    , HH.td [ CSS.style cellStyle ] [ HH.text player.batSide ]   
+    , HH.td [ CSS.style cellStyle ] [ HH.text player.primaryPosition ] 
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "Unranked" show player.past_ranking ]  
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" showAsInt player.past_fpts ]  
+    ]
+
+playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
+playersTable players = 
+  HH.table_
+    [ HH.thead_ [ HH.tr_ [ HH.th_ [HH.text "Header Name"] ] ]
+    , HH.tbody_ $ map renderPlayer $ Map.toUnfoldable players
     ]
 
 showAsInt :: Number -> String
@@ -184,18 +190,18 @@ fetchPlayers = do
   case response of
     Left err -> do
       let errorMsg = "Fetch Error: " <> AW.printError err
-      H.liftEffect $ Console.log errorMsg
+      H.liftEffect $ DEBUG.log errorMsg
       pure $ Left errorMsg
 
     Right res -> do
-      H.liftEffect $ Console.log $ "Raw JSON Response: " <> stringify res.body
+      H.liftEffect $ DEBUG.log $ "Raw JSON Response: " <> stringify res.body
       case decodeJson res.body of
         Right (ActivePlayers (PlayersMap playersMap)) -> do
-          H.liftEffect $ Console.log $ "All Players: " <> show (Map.size playersMap)
+          H.liftEffect $ DEBUG.log $ "All Players: " <> show (Map.size playersMap)
           pure $ Right playersMap
         Left decodeError -> do
           let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
-          H.liftEffect $ Console.log errorMsg
+          H.liftEffect $ DEBUG.log errorMsg
           pure $ Left errorMsg
 
 filterActivePlayers :: String -> Map String Player -> Map String Player
