@@ -20,7 +20,7 @@ import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
 import Data.Array (sortBy)
 import Data.Either (Either(..))
-import Data.Int (trunc)
+import Data.Int (floor, trunc)
 import Data.Int as DI
 import Data.Map (Map)
 import Data.Map as Map
@@ -99,7 +99,7 @@ data Action
   | Initialize
   | HandleError String
   
-component :: forall q i o m. MonadAff m => H.Component q i o m
+component :: forall q i m. MonadAff m => H.Component q i Void m
 component =
   H.mkComponent
     { initialState: \_ -> initialState
@@ -127,7 +127,7 @@ sortDropdown currentSort =
                       , HP.selected $ option == currentSort
                       ] [ HH.text option ]) sortOptions
 
-handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action () output m Unit
+handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Void m Unit
 handleAction = case _ of
   ChangeSort newSort -> do
     H.modify_ \s -> s { currentSort = newSort }
@@ -156,11 +156,10 @@ handleAction = case _ of
     allPlayersMap <- H.gets _.allPlayers
     let filteredPlayers = filterActivePlayers position allPlayersMap
     let sortedFilteredPlayers = sortPlayers filteredPlayers
-    H.modify_ \s -> s { players = sortedFilteredPlayers }
+    H.modify_ \s -> s { players = sortedFilteredPlayers, loading = true }
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
-
 
 columnNames :: Array String
 columnNames = ["MLB_ID", "First", "Last", "Team", "Pitch", "Bat", "Pos", "Active", "'23 Rank", "'23 Points", "NameSlug"]
@@ -256,23 +255,25 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
       { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
       , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
 
-sortPlayersBySelectedOption :: forall output m. MonadAff m => SortOption -> H.HalogenM State Action () output m Unit
+sortPlayersBySelectedOption :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
 sortPlayersBySelectedOption sortOption = do
   currentPlayersMap <- H.gets _.players
-  let sortedPlayers = case sortOption of
-        "Name" -> sortPlayersBy (\p -> p.useLastName <> " " <> p.useName) currentPlayersMap
-        "'23 Rank" -> sortPlayersBy (fromMaybe 0 <<< _.past_ranking) currentPlayersMap
-        "'23 Points" -> sortPlayersBy (fromMaybe 0.0 <<< _.past_fpts) currentPlayersMap
-        _ -> currentPlayersMap
+  let sortedPlayers = sortPlayersBy (getSortValue sortOption) currentPlayersMap
   H.modify_ \s -> s { players = sortedPlayers }
 
 sortPlayersBy :: forall a. Ord a => (Player -> a) -> Map String Player -> Map String Player
 sortPlayersBy f playersMap =
   let
-    comparePlayers :: Tuple String Player -> Tuple String Player -> Ordering
     comparePlayers t1 t2 = compare (f $ snd t1) (f $ snd t2)
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
+
+getSortValue :: SortOption -> Player -> Either String Int
+getSortValue sortOption player = case sortOption of
+  "Name" -> Left (player.useLastName <> " " <> player.useName)
+  "'23 Rank" -> Right $ fromMaybe 0 player.past_ranking  
+  "'23 Points" -> Right $ fromMaybe 0 (floor <$> player.past_fpts)
+  _ -> Left ""
 
 sortPlayers :: Map String Player -> Map String Player
 sortPlayers playersMap =
