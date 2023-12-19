@@ -95,7 +95,7 @@ handleAction = case _ of
     allPlayersMap <- H.gets _.allPlayers
     filterInput <- H.gets _.filterInput
     let filteredPlayers = filterActivePlayers filterInput allPlayersMap
-    let sortedPlayers = applyCurrentSortOption newSort filteredPlayers
+    let sortedPlayers = sortBySelectedOption newSort filteredPlayers
     H.modify_ \s -> s { players = sortedPlayers }
     H.liftEffect $ DEBUG.log $ "New Sorting Chosen and Applied: " <> show newSort
 
@@ -125,7 +125,7 @@ handleAction = case _ of
     allPlayersMap <- H.gets _.allPlayers
     currentSortOption <- H.gets _.currentSort
     let filteredPlayers = filterActivePlayers position allPlayersMap
-    let sortedFilteredPlayers = applyCurrentSortOption currentSortOption filteredPlayers
+    let sortedFilteredPlayers = sortBySelectedOption currentSortOption filteredPlayers
     H.modify_ \s -> s { players = sortedFilteredPlayers }
     H.liftEffect $ DEBUG.log "Data filtered and sorted"
 
@@ -267,20 +267,8 @@ sortDropdown currentSort =
                       , HP.selected $ option == currentSort
                       ] [ HH.text option ]) sortOptions
 
-sortByMLBid :: Map String Player -> Map String Player
-sortByMLBid = sortPlayersBy (\player -> Just player.playerId)
-
-sortBySurname :: Map String Player -> Map String Player
-sortBySurname = sortPlayersBy (\player -> Just (player.useLastName <> " " <> player.useName))
-
-sortByRank :: Map String Player -> Map String Player
-sortByRank = sortPlayersBy (\player -> player.past_ranking)
-
-sortByPoints :: Map String Player -> Map String Player
-sortByPoints = sortPlayersBy (\player -> player.past_fpts)
-
-applyCurrentSortOption :: SortOption -> Map String Player -> Map String Player
-applyCurrentSortOption sortOption playersMap = 
+sortBySelectedOption :: SortOption -> Map String Player -> Map String Player
+sortBySelectedOption sortOption playersMap = 
   case sortOption of
     "MLB ID (default)" -> sortByMLBid playersMap
     "Surname" -> sortBySurname playersMap
@@ -299,9 +287,14 @@ sortPlayersBy f playersMap =
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
 
-sortPlayersBySelectedOption :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
-sortPlayersBySelectedOption sortOption = do
-  allPlayersMap <- H.gets _.allPlayers
-  let sortedPlayers = applyCurrentSortOption sortOption allPlayersMap
-  H.modify_ \s -> s { players = sortedPlayers }
-  H.liftEffect $ DEBUG.log $ "Sorted Players (after sorting): " <> show sortedPlayers
+sortByMLBid :: Map String Player -> Map String Player
+sortByMLBid = sortPlayersBy (\player -> Just player.playerId)
+
+sortBySurname :: Map String Player -> Map String Player
+sortBySurname = sortPlayersBy (\player -> Just (player.useLastName <> " " <> player.useName))
+
+sortByRank :: Map String Player -> Map String Player
+sortByRank = sortPlayersBy (\player -> player.past_ranking)
+
+sortByPoints :: Map String Player -> Map String Player
+sortByPoints = sortPlayersBy (\player -> player.past_fpts)
