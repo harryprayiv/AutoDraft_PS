@@ -90,6 +90,7 @@ type State =
   , currentSort :: SortOption
   , loading :: Boolean
   , error :: Maybe String
+  , sortChangeFlag :: Boolean
   }
 
 initialState :: State
@@ -100,6 +101,7 @@ initialState =
   , currentSort: "Name"
   , loading: false
   , error: Nothing
+  , sortChangeFlag : false
   }
 
 data Action
@@ -197,7 +199,7 @@ renderPlayer (Tuple _ player) =
     , HH.td [ CSS.style cellStyle ] [ HH.text player.batSide ]   
     , HH.td [ CSS.style cellStyle ] [ HH.text player.primaryPosition ] 
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
-    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "Unranked" show player.past_ranking ]  
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" show player.past_ranking ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" showAsInt player.past_fpts ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text player.nameSlug ] 
     ]
@@ -272,14 +274,15 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
 sortPlayersBySelectedOption :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
 sortPlayersBySelectedOption sortOption = do
   currentPlayersMap <- H.gets _.players
+  H.liftEffect $ DEBUG.log $ "Current Players (before sorting): " <> show currentPlayersMap
   let sortedPlayers = case sortOption of
                          "Name" -> sortByName currentPlayersMap
                          "'23 Rank" -> sortByRank currentPlayersMap
                          "'23 Points" -> sortByPoints currentPlayersMap
                          _ -> currentPlayersMap
   H.modify_ \s -> s { players = sortedPlayers }
-  newState <- H.get
-  H.liftEffect $ DEBUG.log $ "Updated State: " <> show newState.players
+  sortedPlayersMap <- H.gets _.players
+  H.liftEffect $ DEBUG.log $ "Sorted Players (after sorting): " <> show sortedPlayersMap
 
 sortPlayersBy :: forall a. Ord a => (Player -> a) -> Map String Player -> Map String Player
 sortPlayersBy f playersMap =
