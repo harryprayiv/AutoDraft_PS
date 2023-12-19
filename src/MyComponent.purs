@@ -44,11 +44,11 @@ data Query a = GetState (State -> a)
 filterDropdown :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 filterDropdown state = 
   HH.select
-    [ HE.onValueInput (FilterByPosition) ]
-    $ map (\(Tuple displayName positionCode) -> HH.option
-           [ HP.value positionCode
-           , HP.selected $ positionCode == state.filterInput
-           ] [ HH.text displayName ]) positionOptions
+    [ HE.onValueInput (FilterBy) ]
+    $ map (\(Tuple displayName filterString) -> HH.option
+           [ HP.value filterString
+           , HP.selected $ filterString == state.filterInput
+           ] [ HH.text displayName ]) filterOptions
 
 type State = 
   { allPlayers :: Map String Player
@@ -72,8 +72,8 @@ initialState =
   }
 
 data Action
-  = FilterByPosition String
-  | ChangeSort SortOption
+  = FilterBy String
+  | SortBy SortOption
   | Initialize
   | HandleError String
   
@@ -88,20 +88,16 @@ component =
         }
     }
 
-render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
-render state =   
-  HH.div_
-    [ filterDropdown state
-    , sortDropdown state.currentSort
-    , playersTable state.players
-    ]
-
 handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Void m Unit
 handleAction = case _ of
-  ChangeSort newSort -> do
+  SortBy newSort -> do
     H.modify_ \s -> s { currentSort = newSort }
-    sortPlayersBySelectedOption newSort
-    H.liftEffect $ DEBUG.log $ "New Sorting Chosen" <> show newSort
+    allPlayersMap <- H.gets _.allPlayers
+    filterInput <- H.gets _.filterInput
+    let filteredPlayers = filterActivePlayers filterInput allPlayersMap
+    let sortedPlayers = applyCurrentSortOption newSort filteredPlayers
+    H.modify_ \s -> s { players = sortedPlayers }
+    H.liftEffect $ DEBUG.log $ "New Sorting Chosen and Applied: " <> show newSort
 
   Initialize -> do
     H.liftEffect $ DEBUG.log "Component initializing..."
@@ -124,7 +120,8 @@ handleAction = case _ of
         H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = true }
         H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
 
-  FilterByPosition position -> do
+  FilterBy position -> do
+    H.modify_ \s -> s { filterInput = position }
     allPlayersMap <- H.gets _.allPlayers
     currentSortOption <- H.gets _.currentSort
     let filteredPlayers = filterActivePlayers position allPlayersMap
@@ -134,6 +131,14 @@ handleAction = case _ of
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
+
+render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
+render state =   
+  HH.div_
+    [ filterDropdown state
+    , sortDropdown state.currentSort
+    , playersTable state.players
+    ]
 
 columnNames :: Array String
 columnNames = ["MLB_ID", "First", "Last", "Team", "Pitch", "Bat", "Pos", "Active", "'23 Rank", "'23 Points", "NameSlug"]
@@ -145,7 +150,6 @@ cellStyle = do
   CSS.paddingBottom (Size.px 0.4)
   CSS.paddingLeft (Size.px 5.0)
   CSS.paddingRight (Size.px 5.0)
-
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
@@ -198,10 +202,10 @@ fetchPlayers = do
           H.liftEffect $ DEBUG.log errorMsg
           pure $ Left errorMsg
 
-type PositionOption = Tuple String String 
+type FilterOption = Tuple String String 
 
-positionOptions :: Array PositionOption
-positionOptions = 
+filterOptions :: Array FilterOption
+filterOptions = 
   [ Tuple "All" ""
   , Tuple "P" "1"
   , Tuple "C" "2"
@@ -228,11 +232,9 @@ fetchRankings = do
     { url = "./appData/rosters/2023_Rankings.csv"
     , responseFormat = string 
     }
-
   case response of
     Left err -> pure $ Left $ AW.printError err
     Right res -> pure $ Right $ parseRankingCSV res.body
-
 
 mergePlayerData :: Map String Player -> RankingCSV -> Map String Player
 mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
@@ -259,7 +261,7 @@ sortOptions = ["MLB ID (default)", "Surname", "'23 Rank", "'23 Points"]
 sortDropdown :: forall m. MonadAff m => SortOption -> H.ComponentHTML Action () m
 sortDropdown currentSort = 
   HH.select
-    [ HE.onValueInput ChangeSort ]
+    [ HE.onValueInput SortBy ]
     $ map (\option -> HH.option
                       [ HP.value option
                       , HP.selected $ option == currentSort
@@ -272,24 +274,10 @@ sortBySurname :: Map String Player -> Map String Player
 sortBySurname = sortPlayersBy (\player -> Just (player.useLastName <> " " <> player.useName))
 
 sortByRank :: Map String Player -> Map String Player
-sortByRank = sortPlayersBy (\player -> player.past_ranking) 
+sortByRank = sortPlayersBy (\player -> player.past_ranking)
 
 sortByPoints :: Map String Player -> Map String Player
 sortByPoints = sortPlayersBy (\player -> player.past_fpts)
-
-sortPlayersBySelectedOption :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
-sortPlayersBySelectedOption sortOption = do
-  currentPlayersMap <- H.gets _.players
-  H.liftEffect $ DEBUG.log $ "Current Players (before sorting): " <> show currentPlayersMap
-  let sortedPlayers = case sortOption of
-                         "MLB ID (default)" -> sortByMLBid currentPlayersMap
-                         "Surname" -> sortBySurname currentPlayersMap
-                         "'23 Rank" -> sortByRank currentPlayersMap
-                         "'23 Points" -> sortByPoints currentPlayersMap
-                         _ -> currentPlayersMap
-  H.modify_ \s -> s { players = sortedPlayers }
-  sortedPlayersMap <- H.gets _.players
-  H.liftEffect $ DEBUG.log $ "Sorted Players (after sorting): " <> show sortedPlayersMap
 
 applyCurrentSortOption :: SortOption -> Map String Player -> Map String Player
 applyCurrentSortOption sortOption playersMap = 
@@ -304,11 +292,16 @@ sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> Map String Player -> 
 sortPlayersBy f playersMap =
   let
     comparePlayers t1 t2 = compareMaybe (f $ snd t1) (f $ snd t2)
+    compareMaybe (Just a) (Just b) = compare a b
+    compareMaybe Nothing (Just _)  = GT
+    compareMaybe (Just _) Nothing  = LT
+    compareMaybe Nothing Nothing   = EQ
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
 
-compareMaybe :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
-compareMaybe (Just a) (Just b) = compare a b
-compareMaybe Nothing (Just _)  = GT 
-compareMaybe (Just _) Nothing  = LT
-compareMaybe Nothing Nothing   = EQ
+sortPlayersBySelectedOption :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
+sortPlayersBySelectedOption sortOption = do
+  allPlayersMap <- H.gets _.allPlayers
+  let sortedPlayers = applyCurrentSortOption sortOption allPlayersMap
+  H.modify_ \s -> s { players = sortedPlayers }
+  H.liftEffect $ DEBUG.log $ "Sorted Players (after sorting): " <> show sortedPlayers
