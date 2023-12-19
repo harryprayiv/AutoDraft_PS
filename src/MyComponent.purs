@@ -37,7 +37,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (ActivePlayers(..), Player, PlayersMap(..))
+import Player (ActivePlayers(..), Player, PlayersMap(..), position, teams)
 
 data Query a = GetState (State -> a)
 
@@ -48,7 +48,7 @@ filterDropdown state =
     $ map (\(Tuple displayName filterString) -> HH.option
            [ HP.value filterString
            , HP.selected $ filterString == state.filterInput
-           ] [ HH.text displayName ]) filterOptions
+           ] [ HH.text displayName ]) position
 
 type State = 
   { allPlayers :: Map String Player
@@ -92,12 +92,11 @@ handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Voi
 handleAction = case _ of
   SortBy newSort -> do
     H.modify_ \s -> s { currentSort = newSort }
-    allPlayersMap <- H.gets _.allPlayers
-    filterInput <- H.gets _.filterInput
-    let filteredPlayers = filterActivePlayers filterInput allPlayersMap
-    let sortedPlayers = sortBySelectedOption newSort filteredPlayers
-    H.modify_ \s -> s { players = sortedPlayers }
-    H.liftEffect $ DEBUG.log $ "New Sorting Chosen and Applied: " <> show newSort
+    updatePlayersView
+
+  FilterBy position -> do
+    H.modify_ \s -> s { filterInput = position }
+    updatePlayersView
 
   Initialize -> do
     H.liftEffect $ DEBUG.log "Component initializing..."
@@ -120,17 +119,23 @@ handleAction = case _ of
         H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = true }
         H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
 
-  FilterBy position -> do
-    H.modify_ \s -> s { filterInput = position }
-    allPlayersMap <- H.gets _.allPlayers
-    currentSortOption <- H.gets _.currentSort
-    let filteredPlayers = filterActivePlayers position allPlayersMap
-    let sortedFilteredPlayers = sortBySelectedOption currentSortOption filteredPlayers
-    H.modify_ \s -> s { players = sortedFilteredPlayers }
-    H.liftEffect $ DEBUG.log "Data filtered and sorted"
-
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
+
+  where
+    updatePlayersView :: H.HalogenM State Action () Void m Unit
+    updatePlayersView = do
+      currentState <- H.get
+      let sortedFilteredPlayers = applyFiltersAndSorting currentState.allPlayers currentState
+      H.modify_ \s -> s { players = sortedFilteredPlayers }
+
+applyFiltersAndSorting :: Map String Player -> State -> Map String Player
+applyFiltersAndSorting playersMap state = 
+  let
+    sortedPlayers = sortBySelectedOption state.currentSort playersMap
+    filteredPlayers = filterActivePlayers state.filterInput sortedPlayers
+  in
+    filteredPlayers
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
@@ -177,7 +182,7 @@ playersTable players =
 
 getDisplayValue :: String -> String
 getDisplayValue value =
-  maybe value fst (find (\(Tuple _ code) -> code == value) filterOptions)
+  maybe value fst (find (\(Tuple _ code) -> code == value) position)
 
 getTeamDisplayValue :: Int -> String
 getTeamDisplayValue value =
@@ -209,64 +214,6 @@ fetchPlayers = do
           let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
           H.liftEffect $ DEBUG.log errorMsg
           pure $ Left errorMsg
-
-type FilterOption = Tuple String String 
-
-filterOptions :: Array FilterOption
-filterOptions = 
-  [ Tuple "All" ""
-  , Tuple "P" "1"
-  , Tuple "C" "2"
-  , Tuple "1B" "3"
-  , Tuple "2B" "4"
-  , Tuple "3B" "5"
-  , Tuple "SS" "6"
-  , Tuple "LF" "7"
-  , Tuple "CF" "8"
-  , Tuple "RF" "9"
-  , Tuple "DH" "10"
-  , Tuple "PH" "11"
-  , Tuple "PR" "12"
-  , Tuple "UN" "13"
-  , Tuple "O" "O"
-  , Tuple "Switch" "Y"
-  ]
-
-type TeamLookup = Tuple String Int 
-
-teams :: Array TeamLookup
-teams = 
-  [ Tuple "LAA" 108
-  , Tuple "ARI" 109
-  , Tuple "BAL" 110
-  , Tuple "BOS" 111
-  , Tuple "CHC" 112
-  , Tuple "CIN" 113
-  , Tuple "CLE" 114
-  , Tuple "COL" 115
-  , Tuple "DET" 116
-  , Tuple "HOU" 117
-  , Tuple "KC" 118
-  , Tuple "LAD" 119
-  , Tuple "WSH" 120
-  , Tuple "NYM" 121
-  , Tuple "OAK" 133
-  , Tuple "PIT" 134
-  , Tuple "SD" 135
-  , Tuple "SEA" 136
-  , Tuple "SF" 137
-  , Tuple "STL" 138
-  , Tuple "TB" 139
-  , Tuple "TEX" 140
-  , Tuple "TOR" 141
-  , Tuple "MIN" 142
-  , Tuple "PHI" 143
-  , Tuple "ATL" 144
-  , Tuple "CWS" 145
-  , Tuple "MIA" 146
-  , Tuple "NYY" 147
-  , Tuple "MIL" 158
-  ]
 
 filterActivePlayers :: String -> Map String Player -> Map String Player
 filterActivePlayers filterInput playersMap =
