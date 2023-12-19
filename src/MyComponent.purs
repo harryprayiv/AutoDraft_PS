@@ -17,8 +17,8 @@ import CSVParser (RankingCSV, parseRankingCSV)
 import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
+import Data.Array (find, sortBy)
 import Data.Array (foldl) as Array
-import Data.Array (sortBy)
 import Data.Either (Either(..))
 import Data.Int (trunc)
 import Data.Int as DI
@@ -27,7 +27,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), isNothing, maybe)
 import Data.Number as DN
 import Data.String (trim)
-import Data.Tuple (Tuple(..), snd)
+import Data.Tuple (Tuple(..), fst, snd)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as DEBUG
@@ -157,10 +157,10 @@ renderPlayer (Tuple _ player) =
     [ HH.td [ CSS.style cellStyle ] [ HH.text $ show player.playerId ]
     , HH.td [CSS.style cellStyle] [HH.text player.useName]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.useLastName ]
-    , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.currentTeam ]
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ getTeamDisplayValue player.currentTeam ]    
     , HH.td [ CSS.style cellStyle ] [ HH.text player.pitchHand ]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.batSide ]   
-    , HH.td [ CSS.style cellStyle ] [ HH.text player.primaryPosition ] 
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ getDisplayValue player.primaryPosition ]
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" show player.past_ranking ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" showAsInt player.past_fpts ]  
@@ -174,6 +174,14 @@ playersTable players =
         [ HH.tr_ $ map (\name -> HH.th_ [HH.text name]) columnNames ]
     , HH.tbody_ $ map renderPlayer $ Map.toUnfoldable players
     ]
+
+getDisplayValue :: String -> String
+getDisplayValue value =
+  maybe value fst (find (\(Tuple _ code) -> code == value) filterOptions)
+
+getTeamDisplayValue :: Int -> String
+getTeamDisplayValue value =
+  maybe (show value) fst (find (\(Tuple _ code) -> code == value) teams)
 
 showAsInt :: Number -> String
 showAsInt num = show $ trunc num
@@ -217,8 +225,47 @@ filterOptions =
   , Tuple "CF" "8"
   , Tuple "RF" "9"
   , Tuple "DH" "10"
+  , Tuple "PH" "11"
+  , Tuple "PR" "12"
+  , Tuple "UN" "13"
   , Tuple "O" "O"
-  , Tuple "Shohei" "Y"
+  , Tuple "Switch" "Y"
+  ]
+
+type TeamLookup = Tuple String Int 
+
+teams :: Array TeamLookup
+teams = 
+  [ Tuple "LAA" 108
+  , Tuple "ARI" 109
+  , Tuple "BAL" 110
+  , Tuple "BOS" 111
+  , Tuple "CHC" 112
+  , Tuple "CIN" 113
+  , Tuple "CLE" 114
+  , Tuple "COL" 115
+  , Tuple "DET" 116
+  , Tuple "HOU" 117
+  , Tuple "KC" 118
+  , Tuple "LAD" 119
+  , Tuple "WSH" 120
+  , Tuple "NYM" 121
+  , Tuple "OAK" 133
+  , Tuple "PIT" 134
+  , Tuple "SD" 135
+  , Tuple "SEA" 136
+  , Tuple "SF" 137
+  , Tuple "STL" 138
+  , Tuple "TB" 139
+  , Tuple "TEX" 140
+  , Tuple "TOR" 141
+  , Tuple "MIN" 142
+  , Tuple "PHI" 143
+  , Tuple "ATL" 144
+  , Tuple "CWS" 145
+  , Tuple "MIA" 146
+  , Tuple "NYY" 147
+  , Tuple "MIL" 158
   ]
 
 filterActivePlayers :: String -> Map String Player -> Map String Player
