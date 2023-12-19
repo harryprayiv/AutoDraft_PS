@@ -24,6 +24,7 @@ parseRankingCSV :: String -> RankingCSV
 parseRankingCSV content =
   let
     rows = normalizeAndSplitLines content
-    fields = map (split (Pattern ",")) rows
+    cleanField = replace (Pattern "\r") (Replacement "")
+    fields = map (\row -> map cleanField (split (Pattern ",") row)) rows
   in
     fields

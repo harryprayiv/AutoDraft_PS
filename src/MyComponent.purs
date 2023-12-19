@@ -20,12 +20,13 @@ import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
 import Data.Array (sortBy)
 import Data.Either (Either(..))
-import Data.Int (floor, trunc)
+import Data.Int (trunc)
 import Data.Int as DI
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
 import Data.Number as DN
+import Data.String (trim)
 import Data.Tuple (Tuple(..), snd)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
@@ -45,6 +46,14 @@ type SortOption = String
 sortOptions :: Array SortOption
 sortOptions = ["Name", "'23 Rank", "'23 Points"]
 
+sortByName :: Map String Player -> Map String Player
+sortByName = sortPlayersBy (\player -> player.useLastName <> " " <> player.useName)
+
+sortByRank :: Map String Player -> Map String Player
+sortByRank = sortPlayersBy (\player -> fromMaybe 0 player.past_ranking)  -- Using maxBound for players with no rank
+
+sortByPoints :: Map String Player -> Map String Player
+sortByPoints = sortPlayersBy (\player -> fromMaybe 0.0 player.past_fpts)
 
 type PositionOption = Tuple String String -- (Display Name, Position Code)
 
@@ -111,7 +120,7 @@ component =
     }
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
-render state =    
+render state =   
   HH.div_
     [ positionDropdown state
     , sortDropdown state.currentSort
@@ -132,6 +141,8 @@ handleAction = case _ of
   ChangeSort newSort -> do
     H.modify_ \s -> s { currentSort = newSort }
     sortPlayersBySelectedOption newSort
+    H.liftEffect $ DEBUG.log $ "New Sorting Chosen"  <> show newSort
+
   Initialize -> do
     H.liftEffect $ DEBUG.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
@@ -157,6 +168,8 @@ handleAction = case _ of
     let filteredPlayers = filterActivePlayers position allPlayersMap
     let sortedFilteredPlayers = sortPlayers filteredPlayers
     H.modify_ \s -> s { players = sortedFilteredPlayers, loading = true }
+    H.liftEffect $ DEBUG.log "Data successfully filtered"
+
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
@@ -171,6 +184,7 @@ cellStyle = do
   CSS.paddingBottom (Size.px 0.4)
   CSS.paddingLeft (Size.px 5.0)
   CSS.paddingRight (Size.px 5.0)
+
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
@@ -245,8 +259,8 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
     updatePlayerRanking acc row = case row of
       [mlbId, _, _, fptsStr, rankingStr] ->
         let
-          maybeRanking = DI.fromString rankingStr
-          maybeFPTS = DN.fromString fptsStr
+          maybeRanking = DI.fromString $ trim rankingStr
+          maybeFPTS = DN.fromString $ trim fptsStr
         in Map.update (updatePlayer maybeRanking maybeFPTS) mlbId acc
       _ -> acc
 
@@ -258,8 +272,14 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
 sortPlayersBySelectedOption :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
 sortPlayersBySelectedOption sortOption = do
   currentPlayersMap <- H.gets _.players
-  let sortedPlayers = sortPlayersBy (getSortValue sortOption) currentPlayersMap
+  let sortedPlayers = case sortOption of
+                         "Name" -> sortByName currentPlayersMap
+                         "'23 Rank" -> sortByRank currentPlayersMap
+                         "'23 Points" -> sortByPoints currentPlayersMap
+                         _ -> currentPlayersMap
   H.modify_ \s -> s { players = sortedPlayers }
+  newState <- H.get
+  H.liftEffect $ DEBUG.log $ "Updated State: " <> show newState.players
 
 sortPlayersBy :: forall a. Ord a => (Player -> a) -> Map String Player -> Map String Player
 sortPlayersBy f playersMap =
@@ -267,13 +287,6 @@ sortPlayersBy f playersMap =
     comparePlayers t1 t2 = compare (f $ snd t1) (f $ snd t2)
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
-
-getSortValue :: SortOption -> Player -> Either String Int
-getSortValue sortOption player = case sortOption of
-  "Name" -> Left (player.useLastName <> " " <> player.useName)
-  "'23 Rank" -> Right $ fromMaybe 0 player.past_ranking  
-  "'23 Points" -> Right $ fromMaybe 0 (floor <$> player.past_fpts)
-  _ -> Left ""
 
 sortPlayers :: Map String Player -> Map String Player
 sortPlayers playersMap =
