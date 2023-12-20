@@ -5,30 +5,18 @@ module MyComponent
 
 import Prelude
 
-import Affjax (defaultRequest)
-import Affjax.ResponseFormat (json, string)
-import Affjax.Web as AW
 import CSS.Border as Border
 import CSS.Color as Color
 import CSS.Geometry (paddingBottom, paddingLeft, paddingRight, paddingTop) as CSS
 import CSS.Size as Size
 import CSS.Stylesheet (CSS)
-import CSVParser (RankingCSV, parseRankingCSV)
-import Data.Argonaut.Core (stringify)
-import Data.Argonaut.Decode (decodeJson)
-import Data.Argonaut.Decode.Error (printJsonDecodeError)
-import Data.Array (find, sortBy)
-import Data.Array (foldl) as Array
+import Data.Array (find)
 import Data.Either (Either(..))
 import Data.Int (trunc)
-import Data.Int as DI
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), isNothing, maybe)
-import Data.Number as DN
-import Data.String (trim)
-import Data.Tuple (Tuple(..), fst, snd)
-import Effect.Aff (Aff)
+import Data.Maybe (Maybe(..), maybe)
+import Data.Tuple (Tuple(..), fst)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as DEBUG
 import Halogen (liftAff)
@@ -37,18 +25,10 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (ActivePlayers(..), Player, PlayersMap(..), position, teams)
+import Player (Player, position, teams)
+import Sorting (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergeAndSortPlayers, sortBySelectedOption, sortOptions) 
 
 data Query a = GetState (State -> a)
-
-filterDropdown :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
-filterDropdown state = 
-  HH.select
-    [ HE.onValueInput (FilterBy) ]
-    $ map (\(Tuple displayName filterString) -> HH.option
-           [ HP.value filterString
-           , HP.selected $ filterString == state.filterInput
-           ] [ HH.text displayName ]) position
 
 type State = 
   { allPlayers :: Map String Player
@@ -65,7 +45,7 @@ initialState =
   { allPlayers: Map.empty
   , players: Map.empty
   , filterInput: ""
-  , currentSort: "Name"
+  , currentSort: ""
   , loading: false
   , error: Nothing
   , sortChangeFlag : false
@@ -91,10 +71,12 @@ component =
 handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Void m Unit
 handleAction = case _ of
   SortBy newSort -> do
+    H.liftEffect $ DEBUG.log $ "Sorting by: " <> newSort
     H.modify_ \s -> s { currentSort = newSort }
     updatePlayersView
 
   FilterBy position -> do
+    H.liftEffect $ DEBUG.log $ "Filtering by position: " <> position
     H.modify_ \s -> s { filterInput = position }
     updatePlayersView
 
@@ -102,7 +84,6 @@ handleAction = case _ of
     H.liftEffect $ DEBUG.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
     rankingResult <- liftAff fetchRankings
-    H.liftEffect $ DEBUG.log $ "Parsed Rankings: " <> show rankingResult
 
     case Tuple playerResult rankingResult of
       Tuple (Left playerError) _ -> do
@@ -114,8 +95,8 @@ handleAction = case _ of
         H.modify_ \s -> s { error = Just rankingError, loading = false }
 
       Tuple (Right playersMap) (Right rankings) -> do
-        let mergedPlayers = mergePlayerData playersMap rankings
-        let mergedAndSortedPlayers = sortByMLBid mergedPlayers
+        let defaultSort = "Surname"
+        let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
         H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = true }
         H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
 
@@ -126,16 +107,9 @@ handleAction = case _ of
     updatePlayersView :: H.HalogenM State Action () Void m Unit
     updatePlayersView = do
       currentState <- H.get
-      let sortedFilteredPlayers = applyFiltersAndSorting currentState.allPlayers currentState
+      let filteredPlayers = filterActivePlayers currentState.filterInput currentState.allPlayers
+      let sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
       H.modify_ \s -> s { players = sortedFilteredPlayers }
-
-applyFiltersAndSorting :: Map String Player -> State -> Map String Player
-applyFiltersAndSorting playersMap state = 
-  let
-    sortedPlayers = sortBySelectedOption state.currentSort playersMap
-    filteredPlayers = filterActivePlayers state.filterInput sortedPlayers
-  in
-    filteredPlayers
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
@@ -168,7 +142,7 @@ renderPlayer (Tuple _ player) =
     , HH.td [ CSS.style cellStyle ] [ HH.text $ getDisplayValue player.primaryPosition ]
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" show player.past_ranking ]  
-    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" showAsInt player.past_fpts ]  
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "0" showAsInt player.past_fpts ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text player.nameSlug ] 
     ]
 
@@ -191,66 +165,14 @@ getTeamDisplayValue value =
 showAsInt :: Number -> String
 showAsInt num = show $ trunc num
 
-fetchPlayers :: Aff (Either String (Map String Player))
-fetchPlayers = do
-  response <- AW.request $ defaultRequest
-    { url = "./appData/rosters/activePlayers.json"
-    , responseFormat = json
-    }
-
-  case response of
-    Left err -> do
-      let errorMsg = "Fetch Error: " <> AW.printError err
-      H.liftEffect $ DEBUG.log errorMsg
-      pure $ Left errorMsg
-
-    Right res -> do
-      H.liftEffect $ DEBUG.log $ "Raw JSON Response: " <> stringify res.body
-      case decodeJson res.body of
-        Right (ActivePlayers (PlayersMap playersMap)) -> do
-          H.liftEffect $ DEBUG.log $ "All Players: " <> show (Map.size playersMap)
-          pure $ Right playersMap
-        Left decodeError -> do
-          let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
-          H.liftEffect $ DEBUG.log errorMsg
-          pure $ Left errorMsg
-
-filterActivePlayers :: String -> Map String Player -> Map String Player
-filterActivePlayers filterInput playersMap =
-    if filterInput == "" then playersMap
-    else Map.filter (\player -> player.primaryPosition == filterInput) playersMap
-
-fetchRankings :: Aff (Either String RankingCSV)
-fetchRankings = do
-  response <- AW.request $ defaultRequest 
-    { url = "./appData/rosters/2023_Rankings.csv"
-    , responseFormat = string 
-    }
-  case response of
-    Left err -> pure $ Left $ AW.printError err
-    Right res -> pure $ Right $ parseRankingCSV res.body
-
-mergePlayerData :: Map String Player -> RankingCSV -> Map String Player
-mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
-  where
-    updatePlayerRanking acc row = case row of
-      [mlbId, _, _, fptsStr, rankingStr] ->
-        let
-          maybeRanking = DI.fromString $ trim rankingStr
-          maybeFPTS = DN.fromString $ trim fptsStr
-        in Map.update (updatePlayer maybeRanking maybeFPTS) mlbId acc
-      _ -> acc
-
-    updatePlayer :: Maybe Int -> Maybe Number -> Player -> Maybe Player
-    updatePlayer maybeRanking maybeFPTS player = Just $ player
-      { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
-      , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
-
--- Sorting functionality
-type SortOption = String
-
-sortOptions :: Array SortOption
-sortOptions = ["MLB ID (default)", "Surname", "'23 Rank", "'23 Points"]
+filterDropdown :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
+filterDropdown state = 
+  HH.select
+    [ HE.onValueInput (FilterBy) ]
+    $ map (\(Tuple displayName filterString) -> HH.option
+           [ HP.value filterString
+           , HP.selected $ filterString == state.filterInput
+           ] [ HH.text displayName ]) position
 
 sortDropdown :: forall m. MonadAff m => SortOption -> H.ComponentHTML Action () m
 sortDropdown currentSort = 
@@ -260,35 +182,3 @@ sortDropdown currentSort =
                       [ HP.value option
                       , HP.selected $ option == currentSort
                       ] [ HH.text option ]) sortOptions
-
-sortBySelectedOption :: SortOption -> Map String Player -> Map String Player
-sortBySelectedOption sortOption playersMap = 
-  case sortOption of
-    "MLB ID (default)" -> sortByMLBid playersMap
-    "Surname" -> sortBySurname playersMap
-    "'23 Rank" -> sortByRank playersMap
-    "'23 Points" -> sortByPoints playersMap
-    _ -> playersMap
-
-sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> Map String Player -> Map String Player
-sortPlayersBy f playersMap =
-  let
-    comparePlayers t1 t2 = compareMaybe (f $ snd t1) (f $ snd t2)
-    compareMaybe (Just a) (Just b) = compare a b
-    compareMaybe Nothing (Just _)  = GT
-    compareMaybe (Just _) Nothing  = LT
-    compareMaybe Nothing Nothing   = EQ
-  in
-    Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
-
-sortByMLBid :: Map String Player -> Map String Player
-sortByMLBid = sortPlayersBy (\player -> Just player.playerId)
-
-sortBySurname :: Map String Player -> Map String Player
-sortBySurname = sortPlayersBy (\player -> Just (player.useLastName <> " " <> player.useName))
-
-sortByRank :: Map String Player -> Map String Player
-sortByRank = sortPlayersBy (\player -> player.past_ranking)
-
-sortByPoints :: Map String Player -> Map String Player
-sortByPoints = sortPlayersBy (\player -> player.past_fpts)
