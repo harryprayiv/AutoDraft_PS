@@ -108,7 +108,7 @@ processDataFetched playersMap rankings = do
 sortPlayers :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
 sortPlayers newSort = do
     H.liftEffect $ DEBUG.log $ "Sorting by: " <> newSort
-    H.modify_ \s -> s { currentSort = newSort }
+    H.modify_ \s -> s { currentSort = newSort, sortChangeFlag = true }
     updatePlayersView
 
 filterPlayers :: forall m. MonadAff m => String -> H.HalogenM State Action () Void m Unit
@@ -131,7 +131,7 @@ updatePlayersView = do
 
   
   unless (currentState.players == sortedFilteredPlayers) $
-    H.modify_ \s -> s { players = sortedFilteredPlayers } -- Check if new list is different to avoid unnecessary updates
+    H.modify_ \s -> s { players = sortedFilteredPlayers, sortChangeFlag = false }
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
