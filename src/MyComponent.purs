@@ -27,7 +27,7 @@ import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Player (Player, position, teams)
-import Sorting (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergeAndSortPlayers, sortBySelectedOption, sortOptions)
+import Sorting (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergeAndSortPlayers, sortBySelectedOption, sortOptions, toSortOption)
 
 data Query a = GetState (State -> a)
 
@@ -72,7 +72,14 @@ component =
 
 handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Void m Unit
 handleAction = case _ of
-  Initialize -> do
+  Initialize -> initializeComponent
+  DataFetched playersMap rankings -> processDataFetched playersMap rankings
+  SortBy newSort -> sortPlayers newSort
+  FilterBy position -> filterPlayers position
+  HandleError errorMsg -> handleError errorMsg
+
+initializeComponent :: forall m. MonadAff m => H.HalogenM State Action () Void m Unit
+initializeComponent = do 
     H.liftEffect $ DEBUG.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
     case playerResult of
@@ -91,36 +98,46 @@ handleAction = case _ of
             H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
             H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
 
-  DataFetched playersMap rankings -> do
+processDataFetched :: forall m. MonadAff m => Map String Player -> RankingCSV -> H.HalogenM State Action () Void m Unit
+processDataFetched playersMap rankings = do
     let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings initialState.currentSort
+    H.liftEffect $ DEBUG.log $ "DataFetched: " <> show (mergedAndSortedPlayers)
     H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
     updatePlayersView
 
-  SortBy newSort -> do
+sortPlayers :: forall m. MonadAff m => SortOption -> H.HalogenM State Action () Void m Unit
+sortPlayers newSort = do
     H.liftEffect $ DEBUG.log $ "Sorting by: " <> newSort
     H.modify_ \s -> s { currentSort = newSort }
     updatePlayersView
 
-  FilterBy position -> do
+filterPlayers :: forall m. MonadAff m => String -> H.HalogenM State Action () Void m Unit
+filterPlayers position = do
     H.liftEffect $ DEBUG.log $ "Filtering by position: " <> position
     H.modify_ \s -> s { filterInput = position }
     updatePlayersView
 
-  HandleError errorMsg -> 
+handleError :: forall m. MonadAff m => String -> H.HalogenM State Action () Void m Unit
+handleError errorMsg = do 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
 updatePlayersView :: forall m. H.HalogenM State Action () Void m Unit
 updatePlayersView = do
   currentState <- H.get
   let filteredPlayers = filterActivePlayers currentState.filterInput currentState.allPlayers
-  let sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
-  H.modify_ \s -> s { players = sortedFilteredPlayers }
+  let sortedFilteredPlayers = case toSortOption currentState.currentSort of
+        "Invalid" -> filteredPlayers 
+        validSort -> sortBySelectedOption validSort filteredPlayers
+
+  
+  unless (currentState.players == sortedFilteredPlayers) $
+    H.modify_ \s -> s { players = sortedFilteredPlayers } -- Check if new list is different to avoid unnecessary updates
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
   HH.div_
     [ filterDropdown state
-    , sortDropdown state.currentSort
+    , sortDropdown state
     , playersTable state.players
     ]
 
@@ -141,10 +158,10 @@ renderPlayer (Tuple _ player) =
     [ HH.td [ CSS.style cellStyle ] [ HH.text $ show player.playerId ]
     , HH.td [CSS.style cellStyle] [HH.text player.useName]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.useLastName ]
-    , HH.td [ CSS.style cellStyle ] [ HH.text $ getTeamDisplayValue player.currentTeam ]    
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ translateTeamID player.currentTeam ]    
     , HH.td [ CSS.style cellStyle ] [ HH.text player.pitchHand ]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.batSide ]   
-    , HH.td [ CSS.style cellStyle ] [ HH.text $ getDisplayValue player.primaryPosition ]
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ translatePositionCode player.primaryPosition ]
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" show player.past_ranking ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "0" showAsInt player.past_fpts ]  
@@ -159,12 +176,12 @@ playersTable players =
     , HH.tbody_ $ map renderPlayer $ Map.toUnfoldable players
     ]
 
-getDisplayValue :: String -> String
-getDisplayValue value =
+translatePositionCode :: String -> String
+translatePositionCode value =
   maybe value fst (find (\(Tuple _ code) -> code == value) position)
 
-getTeamDisplayValue :: Int -> String
-getTeamDisplayValue value =
+translateTeamID :: Int -> String
+translateTeamID value =
   maybe (show value) fst (find (\(Tuple _ code) -> code == value) teams)
 
 showAsInt :: Number -> String
@@ -179,11 +196,11 @@ filterDropdown state =
            , HP.selected $ filterString == state.filterInput
            ] [ HH.text displayName ]) position
 
-sortDropdown :: forall m. MonadAff m => SortOption -> H.ComponentHTML Action () m
-sortDropdown currentSort = 
+sortDropdown :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
+sortDropdown state = 
   HH.select
-    [ HE.onValueInput (SortBy) ]
+    [ HE.onValueInput (SortBy <<< toSortOption) ]
     $ map (\option -> HH.option
                       [ HP.value option
-                      , HP.selected $ option == currentSort
+                      , HP.selected $ option == state.currentSort
                       ] [ HH.text option ]) sortOptions

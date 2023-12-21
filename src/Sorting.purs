@@ -94,14 +94,20 @@ type SortOption = String
 sortOptions :: Array SortOption
 sortOptions = ["MLB ID", "Surname", "'23 Rank", "'23 Points"]
 
-sortBySelectedOption :: SortOption -> Map String Player -> Map String Player
-sortBySelectedOption sortOption playersMap = 
-  case sortOption of
+sortBySelectedOption :: String -> Map String Player -> Map String Player
+sortBySelectedOption sortOption playersMap =
+  case toSortOption sortOption of
     "MLB ID" -> sortByMLBid playersMap
     "Surname" -> sortBySurname playersMap
     "'23 Rank" -> sortByRank playersMap
     "'23 Points" -> sortByPoints playersMap
     _ -> playersMap
+
+toSortOption :: String -> SortOption
+toSortOption input = 
+  case find (\option -> option == input) sortOptions of
+    Just validOption -> validOption
+    Nothing -> "MLB ID"
 
 sortByMLBid :: Map String Player -> Map String Player
 sortByMLBid = sortPlayersBy (\player -> Just player.playerId)
