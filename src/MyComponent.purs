@@ -10,6 +10,7 @@ import CSS.Color as Color
 import CSS.Geometry (paddingBottom, paddingLeft, paddingRight, paddingTop) as CSS
 import CSS.Size as Size
 import CSS.Stylesheet (CSS)
+import CSVParser (RankingCSV)
 import Data.Array (find)
 import Data.Either (Either(..))
 import Data.Int (trunc)
@@ -26,50 +27,75 @@ import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Player (Player, position, teams)
-import Sorting (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergeAndSortPlayers, sortBySelectedOption, sortOptions) 
+import Sorting (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergeAndSortPlayers, sortBySelectedOption, sortOptions)
 
 data Query a = GetState (State -> a)
 
-type State = 
-  { allPlayers :: Map String Player
+type State = {
+    allPlayers :: Map String Player
   , players :: Map String Player
   , filterInput :: String
   , currentSort :: SortOption
   , loading :: Boolean
   , error :: Maybe String
   , sortChangeFlag :: Boolean
-  }
+}
 
 initialState :: State
-initialState = 
-  { allPlayers: Map.empty
+initialState = {
+    allPlayers: Map.empty
   , players: Map.empty
   , filterInput: ""
-  , currentSort: ""
-  , loading: false
+  , currentSort: "'23 Rank"  -- Set a default sort option
+  , loading: true
   , error: Nothing
-  , sortChangeFlag : false
-  }
+  , sortChangeFlag: false
+}
 
 data Action
   = FilterBy String
   | SortBy SortOption
   | Initialize
   | HandleError String
+  | DataFetched (Map String Player) RankingCSV
   
 component :: forall q i m. MonadAff m => H.Component q i Void m
-component =
-  H.mkComponent
-    { initialState: \_ -> initialState
-    , render
-    , eval: H.mkEval $ H.defaultEval
-        { handleAction = handleAction
-        , initialize = Just Initialize
-        }
+component = 
+  H.mkComponent {
+    initialState: \_ -> initialState
+  , render
+  , eval: H.mkEval $ H.defaultEval {
+      handleAction = handleAction
+    , initialize = Just Initialize
     }
+  }
 
 handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Void m Unit
 handleAction = case _ of
+  Initialize -> do
+    H.liftEffect $ DEBUG.log "Component initializing..."
+    playerResult <- liftAff fetchPlayers
+    case playerResult of
+      Left err -> do
+        H.liftEffect $ DEBUG.log $ "Error fetching players: " <> err
+        H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
+      Right playersMap -> do
+        rankingResult <- liftAff fetchRankings
+        case rankingResult of
+          Left err -> do
+            H.liftEffect $ DEBUG.log $ "Error fetching rankings: " <> err
+            H.modify_ \s -> s { error = Just $ "Error fetching rankings: " <> err, loading = false }
+          Right rankings -> do
+            let defaultSort = "'23 Rank"
+            let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
+            H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
+            H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
+
+  DataFetched playersMap rankings -> do
+    let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings initialState.currentSort
+    H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
+    updatePlayersView
+
   SortBy newSort -> do
     H.liftEffect $ DEBUG.log $ "Sorting by: " <> newSort
     H.modify_ \s -> s { currentSort = newSort }
@@ -80,36 +106,15 @@ handleAction = case _ of
     H.modify_ \s -> s { filterInput = position }
     updatePlayersView
 
-  Initialize -> do
-    H.liftEffect $ DEBUG.log "Component initializing..."
-    playerResult <- liftAff fetchPlayers
-    rankingResult <- liftAff fetchRankings
-
-    case Tuple playerResult rankingResult of
-      Tuple (Left playerError) _ -> do
-        H.liftEffect $ DEBUG.log $ "Error fetching player data: " <> playerError
-        H.modify_ \s -> s { error = Just playerError, loading = false }
-
-      Tuple _ (Left rankingError) -> do
-        H.liftEffect $ DEBUG.log $ "Error fetching ranking data: " <> rankingError
-        H.modify_ \s -> s { error = Just rankingError, loading = false }
-
-      Tuple (Right playersMap) (Right rankings) -> do
-        let defaultSort = "Surname"
-        let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
-        H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = true }
-        H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
-
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
-  where
-    updatePlayersView :: H.HalogenM State Action () Void m Unit
-    updatePlayersView = do
-      currentState <- H.get
-      let filteredPlayers = filterActivePlayers currentState.filterInput currentState.allPlayers
-      let sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
-      H.modify_ \s -> s { players = sortedFilteredPlayers }
+updatePlayersView :: forall m. H.HalogenM State Action () Void m Unit
+updatePlayersView = do
+  currentState <- H.get
+  let filteredPlayers = filterActivePlayers currentState.filterInput currentState.allPlayers
+  let sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
+  H.modify_ \s -> s { players = sortedFilteredPlayers }
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
@@ -177,7 +182,7 @@ filterDropdown state =
 sortDropdown :: forall m. MonadAff m => SortOption -> H.ComponentHTML Action () m
 sortDropdown currentSort = 
   HH.select
-    [ HE.onValueInput SortBy ]
+    [ HE.onValueInput (SortBy) ]
     $ map (\option -> HH.option
                       [ HP.value option
                       , HP.selected $ option == currentSort

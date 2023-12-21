@@ -45,6 +45,7 @@
                     string-parsers
                     css
                     halogen-css
+                    ordered-set
                   ];
 
                 dir = ./.;
