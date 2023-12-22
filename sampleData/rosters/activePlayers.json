@@ -1,0 +1,73 @@
+{
+    "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+    "dataPulled": "2023_12_15_10_30",
+    "officialPlayers": {
+      "408235": {
+        "active": true,
+        "batSide": "L",
+        "currentTeam": 110,
+        "nameSlug": "john-doe-408235",
+        "pitchHand": "L",
+        "playerId": 408235,
+        "primaryPosition": "5",
+        "useLastName": "Doe",
+        "useName": "John"
+      },
+      "425795": {
+        "active": true,
+        "batSide": "R",
+        "currentTeam": 140,
+        "nameSlug": "jane-smith-425795",
+        "pitchHand": "R",
+        "playerId": 425795,
+        "primaryPosition": "2",
+        "useLastName": "Smith",
+        "useName": "Jane"
+      },
+      "434379": {
+        "active": true,
+        "batSide": "L",
+        "currentTeam": 115,
+        "nameSlug": "emily-jones-434379",
+        "pitchHand": "L",
+        "playerId": 434379,
+        "primaryPosition": "9",
+        "useLastName": "Jones",
+        "useName": "Emily"
+      },
+      "443559": {
+        "active": true,
+        "batSide": "R",
+        "currentTeam": 138,
+        "nameSlug": "michael-brown-443559",
+        "pitchHand": "R",
+        "playerId": 443559,
+        "primaryPosition": "6",
+        "useLastName": "Brown",
+        "useName": "Michael"
+      },
+      "444483": {
+        "active": false,
+        "batSide": "L",
+        "currentTeam": 117,
+        "nameSlug": "chloe-taylor-444483",
+        "pitchHand": "L",
+        "playerId": 444483,
+        "primaryPosition": "7",
+        "useLastName": "Taylor",
+        "useName": "Chloe"
+      },
+      "445927": {
+        "active": true,
+        "batSide": "S",
+        "currentTeam": 113,
+        "nameSlug": "ethan-davis-445927",
+        "pitchHand": "R",
+        "playerId": 445927,
+        "primaryPosition": "4",
+        "useLastName": "Davis",
+        "useName": "Ethan"
+      }
+    }
+  }
+  
