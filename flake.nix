@@ -22,6 +22,7 @@
                   with purs-nix.ps-pkgs;
                   [
                     console
+                    debug
                     effect
                     foreign
                     halogen

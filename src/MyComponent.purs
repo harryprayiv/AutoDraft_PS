@@ -18,8 +18,9 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..), fst)
+-- import Debug (spy)
 import Effect.Aff.Class (class MonadAff)
-import Effect.Console as DEBUG
+import Effect.Console as CONSOLE
 import Halogen (liftAff)
 import Halogen as H
 import Halogen.HTML as HH
@@ -73,48 +74,56 @@ component =
 handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Void m Unit
 handleAction = case _ of
   Initialize -> do
-    H.liftEffect $ DEBUG.log "Component initializing..."
+    H.liftEffect $ CONSOLE.log "Component initializing..."
     playerResult <- liftAff fetchPlayers
     case playerResult of
       Left err -> do
-        H.liftEffect $ DEBUG.log $ "Error fetching players: " <> err
+        H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
         H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
       Right playersMap -> do
         rankingResult <- liftAff fetchRankings
         case rankingResult of
           Left err -> do
-            H.liftEffect $ DEBUG.log $ "Error fetching rankings: " <> err
+            H.liftEffect $ CONSOLE.log $ "Error fetching rankings: " <> err
             H.modify_ \s -> s { error = Just $ "Error fetching rankings: " <> err, loading = false }
           Right rankings -> do
             let defaultSort = "'23 Rank"
             let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
             H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
-            H.liftEffect $ DEBUG.log "Data successfully initialized, merged, and sorted"
+            H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
 
   DataFetched playersMap rankings -> do
-    let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings initialState.currentSort
-    H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
-    updatePlayersView
+    oldState <- H.get
+    let defaultSort = "'23 Rank" -- or however you determine the default sort
+    let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
+    let newState = updatePlayersView $ oldState { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers }
+    H.put newState
+    
 
   SortBy newSort -> do
-    H.liftEffect $ DEBUG.log $ "Sorting by: " <> newSort
-    H.modify_ \s -> s { currentSort = newSort }
-    updatePlayersView
+    H.liftEffect $ CONSOLE.log $ "Sorting by: " <> newSort
+    oldState <- H.get
+    let newState = updatePlayersView $ oldState { currentSort = newSort }
+    H.put newState
 
   FilterBy position -> do
-    H.liftEffect $ DEBUG.log $ "Filtering by position: " <> position
-    H.modify_ \s -> s { filterInput = position }
-    updatePlayersView
+    H.liftEffect $ CONSOLE.log $ "Filtering by position: " <> position
+    oldState <- H.get
+    let filteredPlayers = filterActivePlayers position oldState.allPlayers
+    let sortedFilteredPlayers = sortBySelectedOption oldState.currentSort filteredPlayers
+    let newState = oldState { filterInput = position, players = sortedFilteredPlayers }
+    H.put newState 
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
-updatePlayersView :: forall m. H.HalogenM State Action () Void m Unit
-updatePlayersView = do
-  currentState <- H.get
-  let filteredPlayers = filterActivePlayers currentState.filterInput currentState.allPlayers
-  let sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
-  H.modify_ \s -> s { players = sortedFilteredPlayers }
+updatePlayersView :: State -> State
+updatePlayersView currentState = 
+  let 
+    filteredPlayers = filterActivePlayers currentState.filterInput currentState.allPlayers
+    sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
+  in 
+    currentState { players = sortedFilteredPlayers }
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
