@@ -92,19 +92,19 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
 type SortOption = String
 
 sortOptions :: Array SortOption
-sortOptions = ["MLB ID", "Surname", "'23 Rank", "'23 Points"]
+sortOptions = ["ID", "Surname", "'23 Rank", "'23 Points"]
 
 sortBySelectedOption :: SortOption -> Map String Player -> Map String Player
 sortBySelectedOption sortOption playersMap = 
   case sortOption of
-    "MLB ID" -> sortByMLBid playersMap
+    "ID" -> sortByid playersMap
     "Surname" -> sortBySurname playersMap
     "'23 Rank" -> sortByRank playersMap
     "'23 Points" -> sortByPoints playersMap
     _ -> playersMap
 
-sortByMLBid :: Map String Player -> Map String Player
-sortByMLBid = sortPlayersBy (\player -> Just player.playerId)
+sortByid :: Map String Player -> Map String Player
+sortByid = sortPlayersBy (\player -> Just player.playerId)
 
 sortBySurname :: Map String Player -> Map String Player
 sortBySurname = sortPlayersBy (\player -> Just (player.useLastName <> " " <> player.useName))

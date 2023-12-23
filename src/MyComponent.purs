@@ -47,7 +47,7 @@ initialState = {
     allPlayers: Map.empty
   , players: Map.empty
   , filterInput: ""
-  , currentSort: "'23 Rank"  -- Set a default sort option
+  , currentSort: "ID" 
   , loading: true
   , error: Nothing
   , sortChangeFlag: false
@@ -87,14 +87,14 @@ handleAction = case _ of
             H.liftEffect $ CONSOLE.log $ "Error fetching rankings: " <> err
             H.modify_ \s -> s { error = Just $ "Error fetching rankings: " <> err, loading = false }
           Right rankings -> do
-            let defaultSort = "'23 Rank"
+            let defaultSort = "ID"
             let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
             H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
 
   DataFetched playersMap rankings -> do
     oldState <- H.get
-    let defaultSort = "'23 Rank" -- or however you determine the default sort
+    let defaultSort = "ID" 
     let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
     let newState = updatePlayersView $ oldState { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers }
     H.put newState
@@ -134,7 +134,7 @@ render state =
     ]
 
 columnNames :: Array String
-columnNames = ["MLB_ID", "First", "Last", "Team", "Pitch", "Bat", "Pos", "Active", "'23 Rank", "'23 Points", "NameSlug"]
+columnNames = ["PlayerID ", "First ", "Last ", "Team ", "Pitch ", "Bat ", "Pos ", "Active ", "'23 Rank ", "'23 Points ", "NameSlug "]
 
 cellStyle :: CSS
 cellStyle = do
@@ -155,7 +155,7 @@ renderPlayer (Tuple _ player) =
     , HH.td [ CSS.style cellStyle ] [ HH.text player.batSide ]   
     , HH.td [ CSS.style cellStyle ] [ HH.text $ getDisplayValue player.primaryPosition ]
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
-    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "N/A" show player.past_ranking ]  
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "0" show player.past_ranking ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "0" showAsInt player.past_fpts ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text player.nameSlug ] 
     ]
