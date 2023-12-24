@@ -3,51 +3,42 @@ module MyComponent
   )
   where
 
+import Player (ActivePlayers(..), Player, PlayersMap(..))
 import Prelude
+import Sorting (SortOption, sortBySelectedOption, sortOptions)
 
+import Affjax (defaultRequest)
+import Affjax.ResponseFormat (json, string)
+import Affjax.Web as AW
 import CSS.Border as Border
 import CSS.Color as Color
 import CSS.Geometry (paddingBottom, paddingLeft, paddingRight, paddingTop) as CSS
 import CSS.Size as Size
 import CSS.Stylesheet (CSS)
-import CSVParser (RankingCSV)
-import DOM.HTML.Indexed.ButtonType (ButtonType(..))
-import Data.Array (elem, filter, find, (:), (\\))
-import Data.Either (Either(..), either)
-import Data.Int (trunc)
-import Data.Map (Map)
-import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
-import Data.Tuple (Tuple(..), fst)
-import Debug (spy)
-import Affjax (defaultRequest)
-import Affjax.ResponseFormat (json, string)
-import Affjax.Web as AW
 import CSVParser (RankingCSV, parseRankingCSV)
+import DOM.HTML.Indexed.ButtonType (ButtonType(..))
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
-import Data.Array (any, elem, find, null, sortBy)
+import Data.Array (elem, find, (\\))
 import Data.Array (foldl) as Array
 import Data.Either (Either(..))
 import Data.Int (trunc)
 import Data.Int as DI
-import Effect.Aff.Class (class MonadAff)
-import Effect.Console as CONSOLE
-import Halogen (liftAff)
-import Halogen as H
-import Halogen.HTML as HH
-import Halogen.HTML.CSS (style) as CSS
-import Halogen.HTML.Elements (button)
-import Halogen.HTML.Events as HE
-import Halogen.HTML.Properties as H
-import Halogen.HTML.Properties as HP
+import Data.Map (Map)
+import Data.Map as Map
 import Data.Maybe (Maybe(..), isNothing, maybe)
 import Data.Number as DN
 import Data.String (trim)
-import Data.Tuple (Tuple(..), fst, snd)
+import Data.Tuple (Tuple(..), fst)
 import Effect.Aff (Aff)
-import Player
-import Sorting
+import Effect.Aff.Class (class MonadAff)
+import Effect.Console as CONSOLE
+import Halogen (ClassName(..), liftAff)
+import Halogen as H
+import Halogen.HTML as HH
+import Halogen.HTML.CSS (style) as CSS
+import Halogen.HTML.Events as HE
+import Halogen.HTML.Properties as HP
 
 data Query a = GetState (State -> a)
 
@@ -65,8 +56,7 @@ type PosLookup = Tuple String String
 
 position :: Array PosLookup
 position = 
-  [ Tuple "All" ""
-  , Tuple "P" "1"
+  [ Tuple "P" "1"
   , Tuple "C" "2"
   , Tuple "1B" "3"
   , Tuple "2B" "4"
@@ -119,7 +109,6 @@ teams =
   , Tuple "MIL" 158
   ]
 
-
 initialState :: State
 initialState = {
     allPlayers: Map.empty
@@ -133,6 +122,7 @@ initialState = {
 
 data Action
   = TogglePositionFilter String
+  | ResetFilters
   | SortBy SortOption
   | Initialize
   | HandleError String
@@ -153,18 +143,22 @@ handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Voi
 handleAction = case _ of
   Initialize -> do
     H.liftEffect $ CONSOLE.log "Component initializing..."
-    eitherPlayersMap <- liftAff fetchPlayers
-    eitherRankings <- liftAff fetchRankings
-    case (Tuple eitherPlayersMap eitherRankings) of
-      (Tuple Right playersMap Right rankings) -> do
-        let defaultSort = "ID"
-        let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
-        H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
-        H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
-      _ -> do
-        let errMsg = either (\err -> err) (const "Unknown error") eitherPlayersMap
-        H.modify_ \s -> s { error = Just errMsg, loading = false }
-
+    playerResult <- liftAff fetchPlayers
+    case playerResult of
+      Left err -> do
+        H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
+        H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
+      Right playersMap -> do
+        rankingResult <- liftAff fetchRankings
+        case rankingResult of
+          Left err -> do
+            H.liftEffect $ CONSOLE.log $ "Error fetching rankings: " <> err
+            H.modify_ \s -> s { error = Just $ "Error fetching rankings: " <> err, loading = false }
+          Right rankings -> do
+            let defaultSort = "ID"
+            let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
+            H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
+            H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
 
   DataFetched playersMap rankings -> do
     oldState <- H.get
@@ -172,6 +166,9 @@ handleAction = case _ of
     let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
     let newState = updatePlayersView $ oldState { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers }
     H.put newState
+
+  ResetFilters -> do
+    H.modify_ \s -> s { filterInputs = [] }
 
   TogglePositionFilter posCode -> do
     oldState <- H.get
@@ -201,25 +198,32 @@ toggleFilter :: forall a. Eq a => a -> Array a -> Array a
 toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]
 
 positionButtons :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
-positionButtons state = 
+positionButtons state =
   HH.div_
     $ map createButton position
   where
     createButton :: (Tuple String String) -> H.ComponentHTML Action () m
     createButton (Tuple posName posCode) =
-      let action = TogglePositionFilter posCode
-      in
-        HH.button
-          [ HP.type_ ButtonButton
-          , HE.onClick $ \_ -> H.action
-          , HP.classes $ if elem posCode state.filterInputs then ["active"] else []
-          ]
-          [ HH.text posName ]
+      HH.button
+        [ HP.type_ ButtonButton
+        -- Directly return the action when the button is clicked
+        , HE.onClick $ \_ -> TogglePositionFilter posCode
+        , HP.classes $ if elem posCode state.filterInputs
+                       then [ClassName "active"]
+                       else []
+        ]
+        [ HH.text posName ]
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
   HH.div_
     [ positionButtons state
+    , HH.button
+        [ HP.type_ ButtonButton
+        , HE.onClick $ \_ -> ResetFilters
+        , HP.classes [ClassName "reset-button"]
+        ]
+        [ HH.text "Reset Filters" ]
     , sortDropdown state.currentSort
     , playersTable state.players
     ]
@@ -259,16 +263,8 @@ playersTable players =
     , HH.tbody_ $ map renderPlayer $ Map.toUnfoldable players
     ]
 
-getDisplayValue :: String -> String
-getDisplayValue value =
-  maybe value fst (find (\(Tuple _ code) -> code == value) position)
-
-getTeamDisplayValue :: Int -> String
-getTeamDisplayValue value =
-  maybe (show value) fst (find (\(Tuple _ code) -> code == value) teams)
-
-isPosition :: String -> Player -> Boolean
-isPosition posCode player = player.primaryPosition == posCode
+-- isPosition :: String -> Player -> Boolean
+-- isPosition posCode player = player.primaryPosition == posCode
 
 sortDropdown :: forall m. MonadAff m => SortOption -> H.ComponentHTML Action () m
 sortDropdown currentSort = 
@@ -276,7 +272,7 @@ sortDropdown currentSort =
     [ HE.onValueInput (SortBy) ]
     $ map (\option -> HH.option
                       [ HP.value option
-                      , H.selected $ option == currentSort
+                      , HP.selected $ option == currentSort
                       ] [ HH.text option ]) sortOptions
 
 mergeAndSortPlayers :: Map String Player -> RankingCSV -> SortOption -> Map String Player
