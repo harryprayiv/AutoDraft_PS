@@ -1,20 +1,13 @@
-module MyComponent
-  ( component
+module DraftRanking
+  ( rankPlayersComponent
   )
   where
 
-import Player (ActivePlayers(..), Player, PlayersMap(..))
 import Prelude
-import Sorting (SortOption, sortBySelectedOption, sortOptions)
 
 import Affjax (defaultRequest)
 import Affjax.ResponseFormat (json, string)
 import Affjax.Web as AW
-import CSS.Border as Border
-import CSS.Color as Color
-import CSS.Geometry (paddingBottom, paddingLeft, paddingRight, paddingTop) as CSS
-import CSS.Size as Size
-import CSS.Stylesheet (CSS)
 import CSVParser (RankingCSV, parseRankingCSV)
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
 import Data.Argonaut.Decode (decodeJson)
@@ -39,6 +32,9 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Player (ActivePlayers(..), Player, PlayersMap(..))
+import Sorting (SortOption, sortBySelectedOption, sortOptions)
+import Styling (cellStyle)
 
 data Query a = GetState (State -> a)
 
@@ -128,8 +124,8 @@ data Action
   | HandleError String
   | DataFetched (Map String Player) RankingCSV
   
-component :: forall q i m. MonadAff m => H.Component q i Void m
-component = 
+rankPlayersComponent :: forall q i m. MonadAff m => H.Component q i Void m
+rankPlayersComponent = 
   H.mkComponent {
     initialState: \_ -> initialState
   , render
@@ -168,7 +164,8 @@ handleAction = case _ of
     H.put newState
 
   ResetFilters -> do
-    H.modify_ \s -> s { filterInputs = [] }
+    oldState <- H.get
+    H.modify_ \s -> s { filterInputs = [], players = oldState.allPlayers }
 
   TogglePositionFilter posCode -> do
     oldState <- H.get
@@ -206,7 +203,6 @@ positionButtons state =
     createButton (Tuple posName posCode) =
       HH.button
         [ HP.type_ ButtonButton
-        -- Directly return the action when the button is clicked
         , HE.onClick $ \_ -> TogglePositionFilter posCode
         , HP.classes $ if elem posCode state.filterInputs
                        then [ClassName "active"]
@@ -214,16 +210,20 @@ positionButtons state =
         ]
         [ HH.text posName ]
 
+resetButton :: forall m. MonadAff m => H.ComponentHTML Action () m
+resetButton =
+  HH.button
+    [ HP.type_ HP.ButtonButton
+    , HE.onClick $ \_ -> ResetFilters
+    , HP.classes [HH.ClassName "reset-button"]
+    ]
+    [ HH.text "Reset Filters" ]
+
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
   HH.div_
     [ positionButtons state
-    , HH.button
-        [ HP.type_ ButtonButton
-        , HE.onClick $ \_ -> ResetFilters
-        , HP.classes [ClassName "reset-button"]
-        ]
-        [ HH.text "Reset Filters" ]
+    , resetButton
     , sortDropdown state.currentSort
     , playersTable state.players
     ]
@@ -231,13 +231,6 @@ render state =
 columnNames :: Array String
 columnNames = ["PlayerID ", "First ", "Last ", "Team ", "Pitch ", "Bat ", "Pos ", "Active ", "'23 Rank ", "'23 Points ", "NameSlug "]
 
-cellStyle :: CSS
-cellStyle = do
-  Border.border Border.solid (Size.px 1.0) Color.black
-  CSS.paddingTop (Size.px 0.4)
-  CSS.paddingBottom (Size.px 0.4)
-  CSS.paddingLeft (Size.px 5.0)
-  CSS.paddingRight (Size.px 5.0)
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
@@ -262,9 +255,6 @@ playersTable players =
         [ HH.tr_ $ map (\name -> HH.th_ [HH.text name]) columnNames ]
     , HH.tbody_ $ map renderPlayer $ Map.toUnfoldable players
     ]
-
--- isPosition :: String -> Player -> Boolean
--- isPosition posCode player = player.primaryPosition == posCode
 
 sortDropdown :: forall m. MonadAff m => SortOption -> H.ComponentHTML Action () m
 sortDropdown currentSort = 
