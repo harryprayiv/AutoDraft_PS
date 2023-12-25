@@ -4,7 +4,7 @@ import Prelude
 import Effect (Effect)
 import Halogen.Aff as HA
 import Halogen.VDom.Driver (runUI)
-import DraftRanking (rankPlayersComponent)
+import DraftComponent (rankPlayersComponent)
 
 main :: Effect Unit
 main = HA.runHalogenAff do

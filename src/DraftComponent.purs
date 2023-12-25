@@ -1,4 +1,4 @@
-module DraftRanking
+module DraftComponent
   ( rankPlayersComponent
   )
   where
