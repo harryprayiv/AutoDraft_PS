@@ -25,6 +25,7 @@ import Data.String (trim)
 import Data.Tuple (Tuple(..), fst)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
+import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
 import Halogen (ClassName(..), liftAff)
 import Halogen as H
@@ -155,6 +156,8 @@ handleAction = case _ of
             let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
             H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
+            currentState <- H.get
+            H.liftEffect $ CONSOLE.log "A printout of the current state:" <> logShow currentState
 
   DataFetched playersMap rankings -> do
     oldState <- H.get
@@ -173,12 +176,13 @@ handleAction = case _ of
     let filteredPlayers = filterActivePlayers newFilters oldState.allPlayers
     let newState = oldState { filterInputs = newFilters, players = filteredPlayers }
     H.put newState
-
+    
   SortBy newSort -> do
     H.liftEffect $ CONSOLE.log $ "Sorting by: " <> newSort
     oldState <- H.get
     let newState = updatePlayersView $ oldState { currentSort = newSort }
     H.put newState
+    H.liftEffect $ CONSOLE.log "A printout of the ''sorted'' state:" <> logShow newState
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
