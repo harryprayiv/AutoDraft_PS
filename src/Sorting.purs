@@ -2,11 +2,9 @@ module Sorting where
 
 import Prelude
 
-import Data.Array (sortBy)
-import Data.Map (Map)
-import Data.Map as Map
+import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import Data.Tuple (snd)
+import Data.Tuple (Tuple(..))
 import Player (Player)
 
 type SortOption = String
@@ -14,36 +12,22 @@ type SortOption = String
 sortOptions :: Array SortOption
 sortOptions = ["ID", "Surname", "'23 Rank", "'23 Points"]
 
-sortBySelectedOption :: SortOption -> Map String Player -> Map String Player
-sortBySelectedOption sortOption playersMap = 
+sortBySelectedOption :: SortOption -> Array (Tuple String Player) -> Array (Tuple String Player)
+sortBySelectedOption sortOption playersArray =
   case sortOption of
-    "ID" -> sortByid playersMap
-    "Surname" -> sortBySurname playersMap
-    "'23 Rank" -> sortByRank playersMap
-    "'23 Points" -> sortByPoints playersMap
-    _ -> playersMap
+    "ID" -> sortPlayersBy (\player -> Just player.playerId) playersArray
+    "Surname" -> sortPlayersBy (\player -> Just player.useLastName) playersArray
+    "'23 Rank" -> sortPlayersBy _.past_ranking playersArray
+    "'23 Points" -> sortPlayersBy _.past_fpts playersArray
+    _ -> playersArray
 
-sortByid :: Map String Player -> Map String Player
-sortByid = sortPlayersBy (\player -> Just player.playerId)
-
-sortBySurname :: Map String Player -> Map String Player
-sortBySurname = sortPlayersBy (\player -> Just (player.useLastName <> " " <> player.useName))
-
-sortByRank :: Map String Player -> Map String Player
-sortByRank = sortPlayersBy (\player -> player.past_ranking)
-
-sortByPoints :: Map String Player -> Map String Player
-sortByPoints = sortPlayersBy (\player -> player.past_fpts)
-
-sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> Map String Player -> Map String Player
-sortPlayersBy f playersMap =
+sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> Array (Tuple String Player) -> Array (Tuple String Player)
+sortPlayersBy f playersArray =
   let
-    comparePlayers t1 t2 = compareMaybe (f $ snd t1) (f $ snd t2)
+    comparePlayers (Tuple _ p1) (Tuple _ p2) = compareMaybe (f p1) (f p2)
+    compareMaybe Nothing Nothing   = EQ
+    compareMaybe Nothing (Just _)  = GT
+    compareMaybe (Just _) Nothing  = LT
+    compareMaybe (Just a) (Just b) = compare a b
   in
-    Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
-
-compareMaybe :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
-compareMaybe Nothing Nothing   = EQ
-compareMaybe Nothing (Just _)  = GT  -- Nothing is considered greater so it moves to the end of the list
-compareMaybe (Just _) Nothing  = LT
-compareMaybe (Just a) (Just b) = compare a b    
+    Array.sortBy comparePlayers playersArray

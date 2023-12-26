@@ -5,37 +5,29 @@ module DraftComponent
 
 import Prelude
 
-import Affjax (defaultRequest)
-import Affjax.ResponseFormat (json, string)
-import Affjax.Web as AW
-import CSVParser (RankingCSV, parseRankingCSV)
+import CSVParser (RankingCSV)
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
-import Data.Argonaut.Decode (decodeJson)
-import Data.Argonaut.Decode.Error (printJsonDecodeError)
-import Data.Array (elem, find, (\\))
-import Data.Array (foldl) as Array
+import Data.Array (elem)
 import Data.Either (Either(..))
-import Data.Int (trunc)
-import Data.Int as DI
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), isNothing, maybe)
-import Data.Number as DN
-import Data.String (trim)
-import Data.Tuple (Tuple(..), fst)
-import Effect.Aff (Aff)
+import Data.Maybe (Maybe(..), maybe)
+import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
+import Fetching (fetchPlayers, fetchRankings, mergeAndSortPlayers)
+import Filtering (filterActivePlayers, toggleFilter)
 import Halogen (ClassName(..), liftAff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (ActivePlayers(..), Player, PlayersMap(..))
+import Player (Player, arrayToMap, mapToArray)
 import Sorting (SortOption, sortBySelectedOption, sortOptions)
 import Styling (cellStyle)
+import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt)
 
 data Query a = GetState (State -> a)
 
@@ -48,63 +40,6 @@ type State = {
   , error :: Maybe String
   , sortChangeFlag :: Boolean
 }
-
-type PosLookup = Tuple String String 
-
-position :: Array PosLookup
-position = 
-  [ Tuple "P" "1"
-  , Tuple "C" "2"
-  , Tuple "1B" "3"
-  , Tuple "2B" "4"
-  , Tuple "3B" "5"
-  , Tuple "SS" "6"
-  , Tuple "LF" "7"
-  , Tuple "CF" "8"
-  , Tuple "RF" "9"
-  , Tuple "DH" "10"
-  , Tuple "PH" "11"
-  , Tuple "PR" "12"
-  , Tuple "UN" "13"
-  , Tuple "O" "O"
-  , Tuple "Switch" "Y"
-  ]
-
-type TeamLookup = Tuple String Int 
-
-teams :: Array TeamLookup
-teams = 
-  [ Tuple "LAA" 108
-  , Tuple "ARI" 109
-  , Tuple "BAL" 110
-  , Tuple "BOS" 111
-  , Tuple "CHC" 112
-  , Tuple "CIN" 113
-  , Tuple "CLE" 114
-  , Tuple "COL" 115
-  , Tuple "DET" 116
-  , Tuple "HOU" 117
-  , Tuple "KC" 118
-  , Tuple "LAD" 119
-  , Tuple "WSH" 120
-  , Tuple "NYM" 121
-  , Tuple "OAK" 133
-  , Tuple "PIT" 134
-  , Tuple "SD" 135
-  , Tuple "SEA" 136
-  , Tuple "SF" 137
-  , Tuple "STL" 138
-  , Tuple "TB" 139
-  , Tuple "TEX" 140
-  , Tuple "TOR" 141
-  , Tuple "MIN" 142
-  , Tuple "PHI" 143
-  , Tuple "ATL" 144
-  , Tuple "CWS" 145
-  , Tuple "MIA" 146
-  , Tuple "NYY" 147
-  , Tuple "MIL" 158
-  ]
 
 initialState :: State
 initialState = {
@@ -188,7 +123,8 @@ handleAction = case _ of
   SortBy newSort -> do
     H.liftEffect $ CONSOLE.log "Sorting by: " <> logShow newSort
     oldState <- H.get
-    let newState = updatePlayersView $ oldState { currentSort = newSort }
+    H.liftEffect $ CONSOLE.log $ show oldState.players
+    let newState = updatePlayersView $ oldState { currentSort = newSort, loading = true }
     H.liftEffect $ CONSOLE.log "New State after sorting:"
     H.liftEffect $ CONSOLE.log $ show newState.players
     H.put newState    
@@ -198,14 +134,11 @@ handleAction = case _ of
 
 updatePlayersView :: State -> State
 updatePlayersView currentState =
-  let 
-    filteredPlayers = filterActivePlayers currentState.filterInputs currentState.allPlayers
-    sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
-  in 
-    currentState { players = sortedFilteredPlayers }
-
-toggleFilter :: forall a. Eq a => a -> Array a -> Array a
-toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]
+  let
+    filteredPlayersMap = filterActivePlayers currentState.filterInputs currentState.allPlayers
+    sortedFilteredPlayersArray = sortBySelectedOption currentState.currentSort (mapToArray filteredPlayersMap)
+  in
+    currentState { players = arrayToMap sortedFilteredPlayersArray }
 
 positionButtons :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 positionButtons state =
@@ -252,7 +185,7 @@ render state =
     ]
 
 columnNames :: Array String
-columnNames = ["PlayerID ", "First ", "Last ", "Team ", "Pitch ", "Bat ", "Pos ", "Active ", "'23 Rank ", "'23 Points ", "NameSlug "]
+columnNames = ["ID ", "First ", "Last ", "Team ", "Pitch ", "Bat ", "Pos ", "Active ", "'23 Rank ", "'23 Points ", "NameSlug "]
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 
@@ -263,7 +196,7 @@ renderPlayer (Tuple _ player) =
     , HH.td [ CSS.style cellStyle ] [ HH.text $ getTeamDisplayValue player.currentTeam ]    
     , HH.td [ CSS.style cellStyle ] [ HH.text player.pitchHand ]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.batSide ]   
-    , HH.td [ CSS.style cellStyle ] [ HH.text $ getDisplayValue player.primaryPosition ]
+    , HH.td [ CSS.style cellStyle ] [ HH.text $ getPositionDisplayValue player.primaryPosition ]
     , HH.td [ CSS.style cellStyle ] [ HH.text $ show player.active ]         
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "0" show player.past_ranking ]  
     , HH.td [ CSS.style cellStyle ] [ HH.text $ maybe "0" showAsInt player.past_fpts ]  
@@ -286,72 +219,3 @@ sortDropdown currentSort =
                       [ HP.value option
                       , HP.selected $ option == currentSort
                       ] [ HH.text option ]) sortOptions
-
-mergeAndSortPlayers :: Map String Player -> RankingCSV -> SortOption -> Map String Player
-mergeAndSortPlayers playersMap csvData defaultSort = 
-  let
-    mergedPlayers = mergePlayerData playersMap csvData
-  in
-    sortBySelectedOption defaultSort mergedPlayers
-
-getDisplayValue :: String -> String
-getDisplayValue value =
-  maybe value fst (find (\(Tuple _ code) -> code == value) position)
-
-getTeamDisplayValue :: Int -> String
-getTeamDisplayValue value =
-  maybe (show value) fst (find (\(Tuple _ code) -> code == value) teams)
-
-showAsInt :: Number -> String
-showAsInt num = show $ trunc num
-
-fetchPlayers :: Aff (Either String (Map String Player))
-fetchPlayers = do
-  response <- AW.request $ defaultRequest
-    { url = "./appData/rosters/activePlayers.json"
-    , responseFormat = json
-    }
-  case response of
-    Left err -> do
-      let errorMsg = "Fetch Error: " <> AW.printError err
-      pure $ Left errorMsg
-
-    Right res -> do
-      case decodeJson res.body of
-        Right (ActivePlayers (PlayersMap playersMap)) -> do
-          pure $ Right playersMap
-        Left decodeError -> do
-          let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
-          pure $ Left errorMsg
-
-filterActivePlayers :: Array String -> Map String Player -> Map String Player
-filterActivePlayers posCodes playersMap =
-  case posCodes of
-    [] -> playersMap 
-    codes -> Map.filter (\player -> elem player.primaryPosition codes) playersMap
-
-fetchRankings :: Aff (Either String RankingCSV)
-fetchRankings = do
-  response <- AW.request $ defaultRequest 
-    { url = "./appData/rosters/2023_Rankings.csv"
-    , responseFormat = string 
-    }
-  case response of
-    Left err -> pure $ Left $ AW.printError err
-    Right res -> pure $ Right $ parseRankingCSV res.body
-
-mergePlayerData :: Map String Player -> RankingCSV -> Map String Player
-mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
-  where
-    updatePlayerRanking acc row = case row of
-      [mlbId, _, _, fptsStr, rankingStr] ->
-        let
-          maybeRanking = DI.fromString $ trim rankingStr
-          maybeFPTS = DN.fromString $ trim fptsStr
-        in Map.update (updatePlayer maybeRanking maybeFPTS) mlbId acc
-      _ -> acc
-
-    updatePlayer :: Maybe Int -> Maybe Number -> Player -> Maybe Player
-    updatePlayer maybeRanking maybeFPTS player = Just $ player
-      { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
-      , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
