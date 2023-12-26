@@ -120,6 +120,7 @@ initialState = {
 data Action
   = TogglePositionFilter String
   | ResetFilters
+  | ZeroFilters
   | SortBy SortOption
   | Initialize
   | HandleError String
@@ -170,25 +171,33 @@ handleAction = case _ of
     oldState <- H.get
     H.modify_ \s -> s { filterInputs = [], players = oldState.allPlayers }
 
+  ZeroFilters -> do
+    oldState <- H.get
+    let newFilters = [""]
+    let filteredPlayers = filterActivePlayers newFilters oldState.allPlayers
+    let newState = oldState { filterInputs = newFilters, players = filteredPlayers }
+    H.put newState
+
   TogglePositionFilter posCode -> do
     oldState <- H.get
     let newFilters = toggleFilter posCode oldState.filterInputs
     let filteredPlayers = filterActivePlayers newFilters oldState.allPlayers
     let newState = oldState { filterInputs = newFilters, players = filteredPlayers }
     H.put newState
-    
+
   SortBy newSort -> do
-    H.liftEffect $ CONSOLE.log $ "Sorting by: " <> newSort
+    H.liftEffect $ CONSOLE.log "Sorting by: " <> logShow newSort
     oldState <- H.get
     let newState = updatePlayersView $ oldState { currentSort = newSort }
-    H.put newState
-    H.liftEffect $ CONSOLE.log "A printout of the ''sorted'' state:" <> logShow newState
+    H.liftEffect $ CONSOLE.log "New State after sorting:"
+    H.liftEffect $ CONSOLE.log $ show newState.players
+    H.put newState    
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
 updatePlayersView :: State -> State
-updatePlayersView currentState = 
+updatePlayersView currentState =
   let 
     filteredPlayers = filterActivePlayers currentState.filterInputs currentState.allPlayers
     sortedFilteredPlayers = sortBySelectedOption currentState.currentSort filteredPlayers
@@ -221,20 +230,29 @@ resetButton =
     , HE.onClick $ \_ -> ResetFilters
     , HP.classes [HH.ClassName "reset-button"]
     ]
-    [ HH.text "Reset Filters" ]
+    [ HH.text "Show All" ]
+
+noneButton :: forall m. MonadAff m => H.ComponentHTML Action () m
+noneButton =
+  HH.button
+    [ HP.type_ HP.ButtonButton
+    , HE.onClick $ \_ -> ZeroFilters
+    , HP.classes [HH.ClassName "zero-button"]
+    ]
+    [ HH.text "Hide All" ]
 
 render :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 render state =   
   HH.div_
     [ positionButtons state
     , resetButton
+    , noneButton 
     , sortDropdown state.currentSort
     , playersTable state.players
     ]
 
 columnNames :: Array String
 columnNames = ["PlayerID ", "First ", "Last ", "Team ", "Pitch ", "Bat ", "Pos ", "Active ", "'23 Rank ", "'23 Points ", "NameSlug "]
-
 
 renderPlayer :: forall m. MonadAff m => Tuple String Player -> H.ComponentHTML Action () m
 renderPlayer (Tuple _ player) = 

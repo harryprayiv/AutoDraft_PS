@@ -39,9 +39,11 @@ sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> Map String Player -> 
 sortPlayersBy f playersMap =
   let
     comparePlayers t1 t2 = compareMaybe (f $ snd t1) (f $ snd t2)
-    compareMaybe Nothing Nothing   = EQ
-    compareMaybe Nothing (Just _)  = GT
-    compareMaybe (Just _) Nothing  = LT
-    compareMaybe (Just a) (Just b) = compare a b
   in
     Map.fromFoldable $ sortBy comparePlayers $ Map.toUnfoldable playersMap
+
+compareMaybe :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
+compareMaybe Nothing Nothing   = EQ
+compareMaybe Nothing (Just _)  = GT  -- Nothing is considered greater so it moves to the end of the list
+compareMaybe (Just _) Nothing  = LT
+compareMaybe (Just a) (Just b) = compare a b    
