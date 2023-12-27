@@ -28,3 +28,4 @@ parseRankingCSV content =
     fields = map (\row -> map cleanField (split (Pattern ",") row)) rows
   in
     fields
+

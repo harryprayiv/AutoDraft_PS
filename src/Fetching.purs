@@ -31,7 +31,7 @@ type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
 fetchPlayers :: RequestFunction -> Aff (Either String (Map String Player))
 fetchPlayers requestFunction = do
   response <- requestFunction $ defaultRequest
-    { url = "./appData/rosters/activePlayers.json"
+    { url = "./testData/fake_Players.json"
     , responseFormat = json
     }
   case response of
@@ -50,7 +50,7 @@ fetchPlayers requestFunction = do
 fetchRankings :: RequestFunction -> Aff (Either String RankingCSV)
 fetchRankings requestFunction = do
   response <- requestFunction $ defaultRequest 
-    { url = "./appData/rosters/2023_Rankings.csv"
+    { url = "./testData/fake_Rankings.csv"
     , responseFormat = string 
     }
   case response of
