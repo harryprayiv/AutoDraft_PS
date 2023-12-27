@@ -32,6 +32,7 @@
                     strings
                     parsing
                     affjax-web
+                    affjax-node
                     arrays
                     web-events
                     web-html

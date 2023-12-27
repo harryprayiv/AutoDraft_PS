@@ -5,6 +5,7 @@ module Util.DraftUtils
   , getTeamDisplayValue
   , position
   , showAsInt
+  , spyShow
   , teams
   )
   where
@@ -14,6 +15,7 @@ import Data.Array (find)
 import Data.Maybe (maybe)
 import Data.Tuple (Tuple(..), fst) 
 import Data.Int (trunc)
+import Debug (class DebugWarning, spyWith)
 
 type PosLookup = Tuple String String 
 
@@ -71,6 +73,9 @@ teams =
   , Tuple "NYY" 147
   , Tuple "MIL" 158
   ]
+
+spyShow :: DebugWarning => forall a. Show a => String -> a -> a
+spyShow msg = spyWith msg show
 
 showAsInt :: Number -> String
 showAsInt num = show $ trunc num

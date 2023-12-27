@@ -1,5 +1,6 @@
 module Fetching
-  ( fetchPlayers
+  ( RequestFunction
+  , fetchPlayers
   , fetchRankings
   , mergeAndSortPlayers
   , mergePlayerData
@@ -8,33 +9,34 @@ module Fetching
 
 import Prelude
 
-import Affjax (defaultRequest)
+import Affjax (Error, Request, Response, defaultRequest, printError)
 import Affjax.ResponseFormat (json, string)
-import Affjax.Web as AW
+import CSVParser (RankingCSV, parseRankingCSV)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
-import Data.Either (Either(..))
-import Data.Map (Map)
-import Effect.Aff (Aff)
-import Player (ActivePlayers(..), Player, PlayersMap(..), arrayToMap, mapToArray)
-import Sorting (SortOption, sortBySelectedOption)
-import CSVParser (RankingCSV, parseRankingCSV)
 import Data.Array (foldl) as Array
+import Data.Either (Either(..))
 import Data.Int as DI
+import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
 import Data.String (trim)
+import Effect.Aff (Aff)
+import Player (ActivePlayers(..), Player, PlayersMap(..), arrayToMap, mapToArray)
+import Sorting (SortOption, sortBySelectedOption)
 
-fetchPlayers :: Aff (Either String (Map String Player))
-fetchPlayers = do
-  response <- AW.request $ defaultRequest
+type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
+
+fetchPlayers :: RequestFunction -> Aff (Either String (Map String Player))
+fetchPlayers requestFunction = do
+  response <- requestFunction $ defaultRequest
     { url = "./appData/rosters/activePlayers.json"
     , responseFormat = json
     }
   case response of
     Left err -> do
-      let errorMsg = "Fetch Error: " <> AW.printError err
+      let errorMsg = "Fetch Error: " <> printError err
       pure $ Left errorMsg
 
     Right res -> do
@@ -44,6 +46,16 @@ fetchPlayers = do
         Left decodeError -> do
           let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
           pure $ Left errorMsg
+
+fetchRankings :: RequestFunction -> Aff (Either String RankingCSV)
+fetchRankings requestFunction = do
+  response <- requestFunction $ defaultRequest 
+    { url = "./appData/rosters/2023_Rankings.csv"
+    , responseFormat = string 
+    }
+  case response of
+    Left err -> pure $ Left $ printError err
+    Right res -> pure $ Right $ parseRankingCSV res.body
 
 mergeAndSortPlayers :: Map String Player -> RankingCSV -> SortOption -> Map String Player
 mergeAndSortPlayers playersMap csvData defaultSort =
@@ -68,13 +80,3 @@ mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap 
     updatePlayer maybeRanking maybeFPTS player = Just $ player
       { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
       , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
-
-fetchRankings :: Aff (Either String RankingCSV)
-fetchRankings = do
-  response <- AW.request $ defaultRequest 
-    { url = "./appData/rosters/2023_Rankings.csv"
-    , responseFormat = string 
-    }
-  case response of
-    Left err -> pure $ Left $ AW.printError err
-    Right res -> pure $ Right $ parseRankingCSV res.body

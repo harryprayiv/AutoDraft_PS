@@ -5,6 +5,7 @@ module DraftComponent
 
 import Prelude
 
+import Affjax.Web (request) as AW
 import CSVParser (RankingCSV)
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
 import Data.Array (elem)
@@ -13,6 +14,7 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
+import Debug (spy)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
@@ -27,7 +29,7 @@ import Halogen.HTML.Properties as HP
 import Player (Player, arrayToMap, mapToArray)
 import Sorting (SortOption, sortBySelectedOption, sortOptions)
 import Styling (cellStyle)
-import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt)
+import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt, spyShow)
 
 data Query a = GetState (State -> a)
 
@@ -76,13 +78,14 @@ handleAction :: forall m. MonadAff m => Action -> H.HalogenM State Action () Voi
 handleAction = case _ of
   Initialize -> do
     H.liftEffect $ CONSOLE.log "Component initializing..."
-    playerResult <- liftAff fetchPlayers
+    playerResult <- liftAff $ fetchPlayers AW.request
     case playerResult of
       Left err -> do
         H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
         H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
       Right playersMap -> do
-        rankingResult <- liftAff fetchRankings
+        _ <- H.liftEffect $ pure $ spy "Players Map: " playersMap
+        rankingResult <- liftAff $ fetchRankings AW.request
         case rankingResult of
           Left err -> do
             H.liftEffect $ CONSOLE.log $ "Error fetching rankings: " <> err
@@ -124,19 +127,19 @@ handleAction = case _ of
     H.liftEffect $ CONSOLE.log "Sorting by: " <> logShow newSort
     oldState <- H.get
     H.liftEffect $ CONSOLE.log $ show oldState.players
-    let newState = updatePlayersView $ oldState { currentSort = newSort, loading = true }
-    H.liftEffect $ CONSOLE.log "New State after sorting:"
-    H.liftEffect $ CONSOLE.log $ show newState.players
-    H.put newState    
+    let newState = updatePlayersView $ oldState { currentSort = newSort, loading = true, sortChangeFlag = true }
+    _ <- H.liftEffect $ pure $ spy "After Sorting: " newState
+    H.put newState 
 
+       
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
 updatePlayersView :: State -> State
 updatePlayersView currentState =
   let
-    filteredPlayersMap = filterActivePlayers currentState.filterInputs currentState.allPlayers
-    sortedFilteredPlayersArray = sortBySelectedOption currentState.currentSort (mapToArray filteredPlayersMap)
+    filteredPlayersMap = filterActivePlayers currentState.filterInputs currentState.players
+    sortedFilteredPlayersArray =  sortBySelectedOption currentState.currentSort (mapToArray filteredPlayersMap)
   in
     currentState { players = arrayToMap sortedFilteredPlayersArray }
 
