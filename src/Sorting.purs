@@ -2,9 +2,12 @@ module Sorting where
 
 import Prelude
 
-import Data.Array as Array
+import Data.List (List)
+import Data.List as List
+import Data.Map (Map)
+import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple, snd)
 import Player (Player)
 
 type SortOption = String
@@ -12,22 +15,19 @@ type SortOption = String
 sortOptions :: Array SortOption
 sortOptions = ["ID", "Surname", "'23 Rank", "'23 Points"]
 
-sortBySelectedOption :: SortOption -> Array (Tuple String Player) -> Array (Tuple String Player)
-sortBySelectedOption sortOption playersArray =
-  case sortOption of
-    "ID" -> sortPlayersBy (\player -> Just player.playerId) playersArray
-    "Surname" -> sortPlayersBy (\player -> Just player.useLastName) playersArray
-    "'23 Rank" -> sortPlayersBy _.past_ranking playersArray
-    "'23 Points" -> sortPlayersBy _.past_fpts playersArray
-    _ -> playersArray
-
-sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> Array (Tuple String Player) -> Array (Tuple String Player)
-sortPlayersBy f playersArray =
+sortBySelectedOption :: SortOption -> Map String Player -> Map String Player
+sortBySelectedOption sortOption playersMap =
   let
-    comparePlayers (Tuple _ p1) (Tuple _ p2) = compareMaybe (f p1) (f p2)
-    compareMaybe Nothing Nothing   = EQ
-    compareMaybe Nothing (Just _)  = GT
-    compareMaybe (Just _) Nothing  = LT
-    compareMaybe (Just a) (Just b) = compare a b
+    playersList = Map.toUnfoldable playersMap
   in
-    Array.sortBy comparePlayers playersArray
+    case sortOption of
+      "ID" -> sortPlayersBy (\player -> Just player.playerId) playersList
+      "Surname" -> sortPlayersBy (\player -> Just player.useLastName) playersList
+      "'23 Rank" -> sortPlayersBy _.past_ranking playersList
+      "'23 Points" -> sortPlayersBy _.past_fpts playersList
+      _ -> playersList
+  # Map.fromFoldable
+
+sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> List (Tuple String Player) -> List (Tuple String Player)
+sortPlayersBy f playersList =
+  List.sortBy (comparing (f <<< snd)) playersList

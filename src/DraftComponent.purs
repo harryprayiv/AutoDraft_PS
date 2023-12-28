@@ -14,7 +14,6 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
-import Debug (spy)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
@@ -26,7 +25,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (Player, arrayToMap, mapToArray)
+import Player (Player)
 import Sorting (SortOption, sortBySelectedOption, sortOptions)
 import Styling (cellStyle)
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt, spyShow)
@@ -84,7 +83,7 @@ handleAction = case _ of
         H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
         H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
       Right playersMap -> do
-        _ <- H.liftEffect $ pure $ spy "Players Map: " playersMap
+        -- _ <- H.liftEffect $ pure $ spy "Players Map: " playersMap
         rankingResult <- liftAff $ fetchRankings AW.request
         case rankingResult of
           Left err -> do
@@ -96,7 +95,7 @@ handleAction = case _ of
             H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
             currentState <- H.get
-            H.liftEffect $ CONSOLE.log "A printout of the current state:" <> logShow currentState
+            H.liftEffect $ CONSOLE.log "the current state:" <> logShow currentState
 
   DataFetched playersMap rankings -> do
     oldState <- H.get
@@ -126,12 +125,12 @@ handleAction = case _ of
   SortBy newSort -> do
     H.liftEffect $ CONSOLE.log "Sorting by: " <> logShow newSort
     oldState <- H.get
-    H.liftEffect $ CONSOLE.log $ show oldState.players
+    _ <- H.liftEffect $ pure $ spyShow "Before Sorting: " oldState.players
     let newState = updatePlayersView $ oldState { currentSort = newSort, loading = true, sortChangeFlag = true }
-    _ <- H.liftEffect $ pure $ spy "After Sorting: " newState
-    H.put newState 
+    _ <- H.liftEffect $ pure $ spyShow "After Sorting: " newState.players
+    H.liftEffect $ CONSOLE.log "State: " <> logShow newState
+    H.put newState  
 
-       
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
@@ -139,9 +138,9 @@ updatePlayersView :: State -> State
 updatePlayersView currentState =
   let
     filteredPlayersMap = filterActivePlayers currentState.filterInputs currentState.players
-    sortedFilteredPlayersArray =  sortBySelectedOption currentState.currentSort (mapToArray filteredPlayersMap)
+    sortedFilteredPlayersMap = sortBySelectedOption currentState.currentSort filteredPlayersMap
   in
-    currentState { players = arrayToMap sortedFilteredPlayersArray }
+    currentState { players = sortedFilteredPlayersMap }
 
 positionButtons :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 positionButtons state =

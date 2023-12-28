@@ -5,11 +5,9 @@ module Player
   , PlayerEntry
   , Players
   , PlayersMap(..)
-  , arrayToMap
   , decodeField
   , decodeJsonPlayer
   , decodeJsonPlayerData
-  , mapToArray
   , unwrapPlayersMap
   )
   where
@@ -28,12 +26,6 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
-
-mapToArray :: forall k v. Map k v -> Array (Tuple k v)
-mapToArray = Map.toUnfoldable
-
-arrayToMap :: forall k v. Ord k => Array (Tuple k v) -> Map k v
-arrayToMap = Map.fromFoldable
 
 type PlayerData = 
   { checksum :: String

@@ -23,7 +23,7 @@ import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
 import Data.String (trim)
 import Effect.Aff (Aff)
-import Player (ActivePlayers(..), Player, PlayersMap(..), arrayToMap, mapToArray)
+import Player (ActivePlayers(..), Player, PlayersMap(..))
 import Sorting (SortOption, sortBySelectedOption)
 
 type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
@@ -61,9 +61,9 @@ mergeAndSortPlayers :: Map String Player -> RankingCSV -> SortOption -> Map Stri
 mergeAndSortPlayers playersMap csvData defaultSort =
   let
     mergedPlayersMap = mergePlayerData playersMap csvData
-    sortedPlayersArray = sortBySelectedOption defaultSort (mapToArray mergedPlayersMap)
+    sortedPlayersMap = sortBySelectedOption defaultSort mergedPlayersMap
   in
-    arrayToMap sortedPlayersArray
+    sortedPlayersMap
 
 mergePlayerData :: Map String Player -> RankingCSV -> Map String Player
 mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
