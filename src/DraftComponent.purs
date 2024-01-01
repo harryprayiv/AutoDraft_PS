@@ -14,6 +14,7 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
+import Debug (spy)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
@@ -83,7 +84,7 @@ handleAction = case _ of
         H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
         H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
       Right playersMap -> do
-        -- _ <- H.liftEffect $ pure $ spy "Players Map: " playersMap
+        _ <- H.liftEffect $ pure $ spy "Players Map: " playersMap
         rankingResult <- liftAff $ fetchRankings AW.request
         case rankingResult of
           Left err -> do

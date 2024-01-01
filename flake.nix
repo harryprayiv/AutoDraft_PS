@@ -29,6 +29,7 @@
                     prelude
                     maybe
                     aff
+                    run
                     strings
                     parsing
                     affjax-web
