@@ -16,7 +16,6 @@ import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
 import Data.Either (Either(..))
 import Data.Int as DI
-import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
@@ -27,7 +26,7 @@ import Sorting (SortOption, sortBySelectedOption)
 
 type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
 
-fetchPlayers :: RequestFunction -> Aff (Either String (Map String Player))
+fetchPlayers :: RequestFunction -> Aff (Either String PlayersMap)
 fetchPlayers requestFunction = do
   response <- requestFunction $ defaultRequest
     { url = "./testData/fake_Players.json"
@@ -40,8 +39,7 @@ fetchPlayers requestFunction = do
 
     Right res -> do
       case decodeJson res.body of
-        Right (ActivePlayers (PlayersMap playersMap)) -> do
-          pure $ Right playersMap
+        Right (ActivePlayers playersMap) -> pure $ Right playersMap
         Left decodeError -> do
           let errorMsg = "Decode Error: " <> printJsonDecodeError decodeError
           pure $ Left errorMsg
@@ -56,16 +54,16 @@ fetchRankings requestFunction = do
     Left err -> pure $ Left $ printError err
     Right res -> pure $ Right $ parseRankingCSV res.body
 
-mergeAndSortPlayers :: Map String Player -> RankingCSV -> SortOption -> Map String Player
-mergeAndSortPlayers playersMap csvData defaultSort =
+mergeAndSortPlayers :: PlayersMap -> RankingCSV -> SortOption -> PlayersMap
+mergeAndSortPlayers playersMap rankings sortOption =
   let
-    mergedPlayersMap = mergePlayerData playersMap csvData
-    sortedPlayersMap = sortBySelectedOption defaultSort mergedPlayersMap
+    mergedPlayersMap = mergePlayerData playersMap rankings
+    sortedPlayersMap = sortBySelectedOption sortOption mergedPlayersMap
   in
     sortedPlayersMap
 
-mergePlayerData :: Map String Player -> RankingCSV -> Map String Player
-mergePlayerData playersMap csvData = Array.foldl updatePlayerRanking playersMap csvData
+mergePlayerData :: PlayersMap -> RankingCSV -> PlayersMap
+mergePlayerData (PlayersMap playersMap) csvData = PlayersMap $ Array.foldl updatePlayerRanking playersMap csvData
   where
     updatePlayerRanking acc row = case row of
       [mlbId, _, _, fptsStr, rankingStr] ->

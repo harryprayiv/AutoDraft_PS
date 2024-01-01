@@ -7,15 +7,15 @@ module Filtering
 import Prelude
 
 import Data.Array (elem, (\\))
-import Data.Map (Map)
 import Data.Map as Map
-import Player (Player)
+import Player (PlayersMap(..))
 
 toggleFilter :: forall a. Eq a => a -> Array a -> Array a
 toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]
 
-filterActivePlayers :: Array String -> Map String Player -> Map String Player
-filterActivePlayers posCodes playersMap =
+-- Filtering.purs
+filterActivePlayers :: Array String -> PlayersMap -> PlayersMap
+filterActivePlayers posCodes (PlayersMap playersMap) =
   case posCodes of
-    [] -> playersMap 
-    codes -> Map.filter (\player -> elem player.primaryPosition codes) playersMap
+    [] -> PlayersMap playersMap
+    codes -> PlayersMap $ Map.filter (\player -> elem player.primaryPosition codes) playersMap

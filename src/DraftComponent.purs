@@ -7,13 +7,20 @@ import Prelude
 
 import Affjax.Web (request) as AW
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
-import Data.Array (elem)
+import Data.Array (elem, intercalate, (:))
+import Data.Array as Array
 import Data.Either (Either(..))
+import Data.List (List(..))
+import Data.List as List
+import Data.List.Lazy.NonEmpty as NE
+import Data.List.NonEmpty (NonEmptyList, toList)
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Maybe (Maybe(..))
 import Data.Maybe (Maybe(..), maybe)
-import Data.Tuple (Tuple(..))
-import Debug (spy)
+import Data.NonEmpty (NonEmpty, (:|))
+import Data.Tuple (Tuple(..), uncurry)
+import Debug (class DebugWarning, spy, spyWith)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
@@ -25,16 +32,59 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (Player, RankingCSV)
+import Player (Player, PlayersMap(..), RankingCSV, unwrapPlayersMap)
 import Sorting (SortOption, sortBySelectedOption, sortOptions)
 import Styling (cellStyle)
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt, spyShow)
 
+showPlayersMap :: PlayersMap -> String
+showPlayersMap (PlayersMap playersMap) =
+  let
+    showPlayer :: String -> Player -> String
+    showPlayer key player = "{ Key: " <> key <> ", Player: " <> show player <> " }"
+
+    playersList :: List (Tuple String Player)
+    playersList = Map.toUnfoldable playersMap
+
+    maybeNonEmptyPlayersList :: Maybe (NonEmptyList (Tuple String Player))
+    maybeNonEmptyPlayersList = toNonEmptyArray playersList
+
+    showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
+    showNonEmptyPlayers Nothing = "Empty"
+    showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
+  in "[" <> showNonEmptyPlayers maybeNonEmptyPlayersList <> "]"
+
+toListNEL :: forall a. NonEmptyList a -> List a
+toListNEL nel = toList nel
+
+showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
+showNonEmptyPlayers Nothing = "Empty"
+showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
+
+toNonEmptyArray :: forall a. Array a -> Maybe (NonEmpty Array a)
+toNonEmptyArray arr = case Array.uncons arr of
+  Nothing -> Nothing
+  Just { head: x, tail: xs } -> Just (x :| xs)
+
+spyHalogenState :: DebugWarning => String -> State -> State
+spyHalogenState msg state = 
+  let
+    stateString = "{ allPlayers: " <> showPlayersMap state.allPlayers
+                   <> ", players: " <> showPlayersMap state.players
+                   <> ", filterInputs: " <> show state.filterInputs
+                   <> ", currentSort: " <> show state.currentSort
+                   <> ", loading: " <> show state.loading
+                   <> ", error: " <> show state.error
+                   <> ", sortChangeFlag: " <> show state.sortChangeFlag
+                   <> " }"
+  in
+    spyWith msg (\_ -> stateString) state
+
 data Query a = GetState (State -> a)
 
 type State = {
-    allPlayers :: Map String Player
-  , players :: Map String Player
+    allPlayers :: PlayersMap
+  , players :: PlayersMap
   , filterInputs :: Array String
   , currentSort :: SortOption
   , loading :: Boolean
@@ -44,13 +94,13 @@ type State = {
 
 initialState :: State
 initialState = {
-    allPlayers: Map.empty
-  , players: Map.empty
-  , filterInputs: []
-  , currentSort: "ID" 
-  , loading: true
-  , error: Nothing
-  , sortChangeFlag: false
+    allPlayers:  PlayersMap Map.empty
+  , players:  PlayersMap Map.empty
+  , filterInputs:  []
+  , currentSort:  "ID"
+  , loading:  true
+  , error:  Nothing
+  , sortChangeFlag:  false
 }
 
 data Action
@@ -83,7 +133,6 @@ handleAction = case _ of
         H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
         H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
       Right playersMap -> do
-        _ <- H.liftEffect $ pure $ spy "Players Map: " playersMap
         rankingResult <- liftAff $ fetchRankings AW.request
         case rankingResult of
           Left err -> do
@@ -94,13 +143,11 @@ handleAction = case _ of
             let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
             H.modify_ \s -> s { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
-            currentState <- H.get
-            H.liftEffect $ CONSOLE.log "the current state:" <> logShow currentState
-
+            
   DataFetched playersMap rankings -> do
     oldState <- H.get
-    let defaultSort = "ID" 
-    let mergedAndSortedPlayers = mergeAndSortPlayers playersMap rankings defaultSort
+    let defaultSort = "ID"
+    let mergedAndSortedPlayers = mergeAndSortPlayers (PlayersMap playersMap) rankings defaultSort
     let newState = updatePlayersView $ oldState { allPlayers = mergedAndSortedPlayers, players = mergedAndSortedPlayers }
     H.put newState
 
@@ -128,8 +175,8 @@ handleAction = case _ of
     _ <- H.liftEffect $ pure $ spyShow "Before Sorting: " oldState.players
     let newState = updatePlayersView $ oldState { currentSort = newSort, loading = true, sortChangeFlag = true }
     _ <- H.liftEffect $ pure $ spyShow "After Sorting: " newState.players
-    H.liftEffect $ CONSOLE.log "State: " <> logShow newState
-    H.put newState  
+    -- _ <- H.liftEffect $ pure $ spy "Players Map: " newState
+    H.put $ spyHalogenState "After Sorting" newState  
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
@@ -183,7 +230,7 @@ render state =
     , resetButton
     , noneButton 
     , sortDropdown state.currentSort
-    , playersTable state.players
+    , playersTable state.players  -- Pass PlayersMap directly
     ]
 
 columnNames :: Array String
@@ -205,8 +252,8 @@ renderPlayer (Tuple _ player) =
     , HH.td [ CSS.style cellStyle ] [ HH.text player.nameSlug ] 
     ]
 
-playersTable :: forall m. MonadAff m => Map String Player -> H.ComponentHTML Action () m
-playersTable players = 
+playersTable :: forall m. MonadAff m => PlayersMap -> H.ComponentHTML Action () m
+playersTable (PlayersMap players) = 
   HH.table_
     [ HH.thead_ 
         [ HH.tr_ $ map (\name -> HH.th_ [HH.text name]) columnNames ]
