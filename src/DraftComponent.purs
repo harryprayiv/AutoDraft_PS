@@ -14,13 +14,12 @@ import Data.List (List(..))
 import Data.List as List
 import Data.List.Lazy.NonEmpty as NE
 import Data.List.NonEmpty (NonEmptyList, toList)
-import Data.Map (Map)
-import Data.Map as Map
-import Data.Maybe (Maybe(..))
 import Data.Maybe (Maybe(..), maybe)
 import Data.NonEmpty (NonEmpty, (:|))
 import Data.Tuple (Tuple(..), uncurry)
 import Debug (class DebugWarning, spy, spyWith)
+import Data.Map (Map)
+import Data.Map as Map
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
@@ -32,53 +31,53 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (Player, PlayersMap(..), RankingCSV, unwrapPlayersMap)
+import Types.Player (Player, PlayersMap(..), RankingCSV, unwrapPlayersMap)
 import Sorting (SortOption, sortBySelectedOption, sortOptions)
-import Styling (cellStyle)
+import Styles.Draft (cellStyle)
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt, spyShow)
 
-showPlayersMap :: PlayersMap -> String
-showPlayersMap (PlayersMap playersMap) =
-  let
-    showPlayer :: String -> Player -> String
-    showPlayer key player = "{ Key: " <> key <> ", Player: " <> show player <> " }"
+-- showPlayersMap :: PlayersMap -> String
+-- showPlayersMap (PlayersMap playersMap) =
+--   let
+--     showPlayer :: String -> Player -> String
+--     showPlayer key player = "{ Key: " <> key <> ", Player: " <> show player <> " }"
 
-    playersList :: List (Tuple String Player)
-    playersList = Map.toUnfoldable playersMap
+--     playersList :: List (Tuple String Player)
+--     playersList = Map.toUnfoldable playersMap
 
-    maybeNonEmptyPlayersList :: Maybe (NonEmptyList (Tuple String Player))
-    maybeNonEmptyPlayersList = toNonEmptyArray playersList
+--     maybeNonEmptyPlayersList :: Maybe (NonEmptyList (Tuple String Player))
+--     maybeNonEmptyPlayersList = toNonEmptyArray playersList
 
-    showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
-    showNonEmptyPlayers Nothing = "Empty"
-    showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
-  in "[" <> showNonEmptyPlayers maybeNonEmptyPlayersList <> "]"
+--     showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
+--     showNonEmptyPlayers Nothing = "Empty"
+--     showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
+--   in "[" <> showNonEmptyPlayers maybeNonEmptyPlayersList <> "]"
 
-toListNEL :: forall a. NonEmptyList a -> List a
-toListNEL nel = toList nel
+-- toListNEL :: forall a. NonEmptyList a -> List a
+-- toListNEL nel = toList nel
 
-showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
-showNonEmptyPlayers Nothing = "Empty"
-showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
+-- showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
+-- showNonEmptyPlayers Nothing = "Empty"
+-- showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
 
-toNonEmptyArray :: forall a. Array a -> Maybe (NonEmpty Array a)
-toNonEmptyArray arr = case Array.uncons arr of
-  Nothing -> Nothing
-  Just { head: x, tail: xs } -> Just (x :| xs)
+-- toNonEmptyArray :: forall a. Array a -> Maybe (NonEmpty Array a)
+-- toNonEmptyArray arr = case Array.uncons arr of
+--   Nothing -> Nothing
+--   Just { head: x, tail: xs } -> Just (x :| xs)
 
-spyHalogenState :: DebugWarning => String -> State -> State
-spyHalogenState msg state = 
-  let
-    stateString = "{ allPlayers: " <> showPlayersMap state.allPlayers
-                   <> ", players: " <> showPlayersMap state.players
-                   <> ", filterInputs: " <> show state.filterInputs
-                   <> ", currentSort: " <> show state.currentSort
-                   <> ", loading: " <> show state.loading
-                   <> ", error: " <> show state.error
-                   <> ", sortChangeFlag: " <> show state.sortChangeFlag
-                   <> " }"
-  in
-    spyWith msg (\_ -> stateString) state
+-- spyHalogenState :: DebugWarning => String -> State -> State
+-- spyHalogenState msg state = 
+--   let
+--     stateString = "{ allPlayers: " <> showPlayersMap state.allPlayers
+--                    <> ", players: " <> showPlayersMap state.players
+--                    <> ", filterInputs: " <> show state.filterInputs
+--                    <> ", currentSort: " <> show state.currentSort
+--                    <> ", loading: " <> show state.loading
+--                    <> ", error: " <> show state.error
+--                    <> ", sortChangeFlag: " <> show state.sortChangeFlag
+--                    <> " }"
+--   in
+--     spyWith msg (\_ -> stateString) state
 
 data Query a = GetState (State -> a)
 
@@ -172,11 +171,12 @@ handleAction = case _ of
   SortBy newSort -> do
     H.liftEffect $ CONSOLE.log "Sorting by: " <> logShow newSort
     oldState <- H.get
-    _ <- H.liftEffect $ pure $ spyShow "Before Sorting: " oldState.players
+    -- _ <- H.liftEffect $ pure $ spyShow "Before Sorting: " oldState.players
     let newState = updatePlayersView $ oldState { currentSort = newSort, loading = true, sortChangeFlag = true }
-    _ <- H.liftEffect $ pure $ spyShow "After Sorting: " newState.players
-    -- _ <- H.liftEffect $ pure $ spy "Players Map: " newState
-    H.put $ spyHalogenState "After Sorting" newState  
+    -- _ <- H.liftEffect $ pure $ spyShow "After Sorting: " newState.players
+    _ <- H.liftEffect $ pure $ spy "Players Map: " newState
+    H.put newState
+    -- H.put $ spyHalogenState "After Sorting" newState  
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }

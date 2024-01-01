@@ -21,7 +21,7 @@ import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
 import Data.String (trim)
 import Effect.Aff (Aff)
-import Player (ActivePlayers(..), Player, PlayersMap(..), RankingCSV, parseRankingCSV)
+import Types.Player (ActivePlayers(..), Player, PlayersMap(..), RankingCSV, parseRankingCSV)
 import Sorting (SortOption, sortBySelectedOption)
 
 type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))

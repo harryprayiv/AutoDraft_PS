@@ -1,4 +1,4 @@
-module Player
+module Types.Player
   ( ActivePlayers(..)
   , Player
   , PlayerData

@@ -8,7 +8,7 @@ import Prelude
 
 import Data.Array (elem, (\\))
 import Data.Map as Map
-import Player (PlayersMap(..))
+import Types.Player (PlayersMap(..))
 
 toggleFilter :: forall a. Eq a => a -> Array a -> Array a
 toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]

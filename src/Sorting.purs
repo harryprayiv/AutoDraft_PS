@@ -7,7 +7,7 @@ import Data.List as List
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple, snd)
-import Player (Player, PlayersMap(..))
+import Types.Player (Player, PlayersMap(..))
 
 type SortOption = String
 
