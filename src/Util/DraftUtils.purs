@@ -3,18 +3,23 @@ module Util.DraftUtils
   , TeamLookup
   , getPositionDisplayValue
   , getTeamDisplayValue
+  , normalizeAndSplitLines
   , position
   , showAsInt
   , spyShow
   , teams
   )
   where
+
 import Prelude
 
 import Data.Array (find)
-import Data.Maybe (maybe)
-import Data.Tuple (Tuple(..), fst) 
 import Data.Int (trunc)
+import Data.Maybe (maybe)
+import Data.String (Pattern(..))
+import Data.String.Common (split, replace)
+import Data.String.Pattern (Replacement(..))
+import Data.Tuple (Tuple(..), fst)
 import Debug (class DebugWarning, spyWith)
 
 type PosLookup = Tuple String String 
@@ -87,3 +92,12 @@ getPositionDisplayValue value =
 getTeamDisplayValue :: Int -> String
 getTeamDisplayValue value =
   maybe (show value) fst (find (\(Tuple _ code) -> code == value) teams)
+
+
+normalizeAndSplitLines :: String -> Array String
+normalizeAndSplitLines content =
+  let
+    normalizedContent = replace (Pattern "\r\n") (Replacement "\n") $
+                        replace (Pattern "\r") (Replacement "\n") content
+  in
+    split (Pattern "\n") normalizedContent

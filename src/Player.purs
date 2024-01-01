@@ -5,20 +5,23 @@ module Player
   , PlayerEntry
   , Players
   , PlayersMap(..)
+  , RankingCSV
   , decodeField
   , decodeJsonPlayer
   , decodeJsonPlayerData
+  , parseRankingCSV
   , unwrapPlayersMap
   )
   where
 
 import Prelude
-import Data.Argonaut.Decode (decodeJson)
-import Data.Argonaut.Decode.Error (JsonDecodeError(..))
+
 import Data.Argonaut.Core (Json, toObject)
-import Data.Either (Either(..))
+import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Class (class DecodeJson)
 import Data.Argonaut.Decode.Combinators ((.:))
+import Data.Argonaut.Decode.Error (JsonDecodeError(..))
+import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Map (Map)
 import Data.Map as Map
@@ -26,12 +29,18 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
+import Util.DraftUtils (normalizeAndSplitLines)
+import Data.String (Pattern(..))
+import Data.String.Common (split, replace)
+import Data.String.Pattern (Replacement(..))
 
 type PlayerData = 
   { checksum :: String
   , dataPulled :: String
   , officialPlayers :: PlayersMap
   }
+
+newtype PlayersMap = PlayersMap (Map String Player)
 
 type Player = 
   { active :: Boolean
@@ -48,8 +57,6 @@ type Player =
   , future_fpts :: Maybe Number
   , future_ranking :: Maybe Int
   }
-
-newtype PlayersMap = PlayersMap (Map String Player)
 
 type PlayerEntry = { key :: String, playerJson :: Json }
 
@@ -142,3 +149,14 @@ instance decodeJsonPlayersMap :: DecodeJson PlayersMap where
             Right player -> Map.insert key player acc
             Left _ -> acc
     pure $ PlayersMap $ foldl buildMap Map.empty entries
+
+type RankingCSV = Array (Array String)
+
+parseRankingCSV :: String -> RankingCSV
+parseRankingCSV content =
+  let
+    rows = normalizeAndSplitLines content
+    cleanField = replace (Pattern "\r") (Replacement "")
+    fields = map (\row -> map cleanField (split (Pattern ",") row)) rows
+  in
+    fields

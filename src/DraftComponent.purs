@@ -6,7 +6,6 @@ module DraftComponent
 import Prelude
 
 import Affjax.Web (request) as AW
-import CSVParser (RankingCSV)
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
 import Data.Array (elem)
 import Data.Either (Either(..))
@@ -26,7 +25,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Player (Player)
+import Player (Player, RankingCSV)
 import Sorting (SortOption, sortBySelectedOption, sortOptions)
 import Styling (cellStyle)
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt, spyShow)

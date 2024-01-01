@@ -11,7 +11,6 @@ import Prelude
 
 import Affjax (Error, Request, Response, defaultRequest, printError)
 import Affjax.ResponseFormat (json, string)
-import CSVParser (RankingCSV, parseRankingCSV)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (foldl) as Array
@@ -23,7 +22,7 @@ import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
 import Data.String (trim)
 import Effect.Aff (Aff)
-import Player (ActivePlayers(..), Player, PlayersMap(..))
+import Player (ActivePlayers(..), Player, PlayersMap(..), RankingCSV, parseRankingCSV)
 import Sorting (SortOption, sortBySelectedOption)
 
 type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
