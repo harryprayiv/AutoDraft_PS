@@ -1,5 +1,7 @@
 module Types.Player
   ( ActivePlayers(..)
+  , DisplayPlayer
+  , DisplayPlayers
   , Player
   , PlayerData
   , PlayerEntry
@@ -10,6 +12,7 @@ module Types.Player
   , decodeJsonPlayer
   , decodeJsonPlayerData
   , parseRankingCSV
+  , transformToDisplayPlayers
   , unwrapPlayersMap
   )
   where
@@ -26,13 +29,55 @@ import Data.Foldable (foldl)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.String (Pattern(..))
+import Data.String.Common (split, replace)
+import Data.String.Pattern (Replacement(..))
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
 import Util.DraftUtils (normalizeAndSplitLines)
-import Data.String (Pattern(..))
-import Data.String.Common (split, replace)
-import Data.String.Pattern (Replacement(..))
+
+type DisplayPlayer = {
+    id :: String
+  , active :: Boolean
+  , batSide :: String
+  , currentTeam :: Int
+  , nameSlug :: String
+  , pitchHand :: String
+  , playerId :: Int
+  , primaryPosition :: String
+  , useLastName :: String
+  , useName :: String
+  , past_ranking :: Maybe Int
+  , past_fpts :: Maybe Number
+  , future_fpts :: Maybe Number
+  , future_ranking :: Maybe Int
+  , displayOrder :: Int
+}
+
+transformToDisplayPlayers :: PlayersMap -> DisplayPlayers
+transformToDisplayPlayers (PlayersMap playersMap) =
+  map toDisplayPlayer $ Map.toUnfoldable playersMap
+  where
+    toDisplayPlayer (Tuple key player) = {
+        id: key
+      , active: player.active
+      , batSide: player.batSide
+      , currentTeam: player.currentTeam
+      , nameSlug: player.nameSlug
+      , pitchHand: player.pitchHand
+      , playerId: player.playerId
+      , primaryPosition: player.primaryPosition
+      , useLastName: player.useLastName
+      , useName: player.useName
+      , past_ranking: player.past_ranking
+      , past_fpts: player.past_fpts
+      , future_fpts: player.future_fpts 
+      , future_ranking: player.future_ranking
+      , displayOrder: 0
+    }
+
+type DisplayPlayers = Array DisplayPlayer
 
 type PlayerData = 
   { checksum :: String
