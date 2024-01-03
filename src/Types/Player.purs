@@ -7,12 +7,17 @@ module Types.Player
   , PlayerEntry
   , Players
   , PlayersMap(..)
+  , Query(..)
   , RankingCSV
+  , RequestFunction
+  , SortOption
+  , SortValue(..)
+  , State
+  , compareMaybes
   , decodeField
   , decodeJsonPlayer
   , decodeJsonPlayerData
   , parseRankingCSV
-  , transformToDisplayPlayers
   , unwrapPlayersMap
   )
   where
@@ -24,6 +29,7 @@ import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Class (class DecodeJson)
 import Data.Argonaut.Decode.Combinators ((.:))
 import Data.Argonaut.Decode.Error (JsonDecodeError(..))
+import Affjax (Error, Request, Response)
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Map (Map)
@@ -36,6 +42,56 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
 import Util.DraftUtils (normalizeAndSplitLines)
+import Data.Int (toNumber)
+import Effect.Aff (Aff)
+
+type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
+
+data Query a = GetState (State -> a)
+
+type SortOption = String
+
+data SortValue
+  = SortString String
+  | SortNumber (Maybe Number)
+  | SortInt (Maybe Int)
+
+instance eqSortValue :: Eq SortValue where
+  eq x y = case (Tuple x y) of
+    (Tuple (SortString a) (SortString b)) -> a == b
+    (Tuple (SortNumber ma) (SortNumber mb)) -> ma == mb
+    (Tuple (SortInt ma) (SortInt mb)) -> ma == mb
+    _ -> false
+
+instance ordSortValue :: Ord SortValue where
+  compare x y = case (Tuple x y) of
+    (Tuple (SortString a) (SortString b)) -> compare a b
+    (Tuple (SortNumber ma) (SortNumber mb)) -> compareMaybes ma mb
+    (Tuple (SortInt ma) (SortInt mb)) -> compareMaybes (map toNumber ma) (map toNumber mb)
+    _ -> EQ
+
+
+compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
+compareMaybes Nothing Nothing = EQ
+compareMaybes Nothing (Just _) = GT
+compareMaybes (Just _) Nothing = LT
+compareMaybes (Just a) (Just b) = compare a b
+
+
+type State = {
+    allPlayers :: PlayersMap
+  , displayPlayers :: DisplayPlayers
+  , filterInputs :: Array String
+  , currentSort :: SortOption
+  , loading :: Boolean
+  , error :: Maybe String
+  , sortChangeFlag :: Boolean
+  , sortOrder :: Boolean
+  , dragIndex :: Maybe Int
+  , dropIndex :: Maybe Int
+  , manualOrdering :: Boolean 
+}
+
 
 type DisplayPlayer = {
     id :: String
@@ -54,28 +110,6 @@ type DisplayPlayer = {
   , future_ranking :: Maybe Int
   , displayOrder :: Int
 }
-
-transformToDisplayPlayers :: PlayersMap -> DisplayPlayers
-transformToDisplayPlayers (PlayersMap playersMap) =
-  map toDisplayPlayer $ Map.toUnfoldable playersMap
-  where
-    toDisplayPlayer (Tuple key player) = {
-        id: key
-      , active: player.active
-      , batSide: player.batSide
-      , currentTeam: player.currentTeam
-      , nameSlug: player.nameSlug
-      , pitchHand: player.pitchHand
-      , playerId: player.playerId
-      , primaryPosition: player.primaryPosition
-      , useLastName: player.useLastName
-      , useName: player.useName
-      , past_ranking: player.past_ranking
-      , past_fpts: player.past_fpts
-      , future_fpts: player.future_fpts 
-      , future_ranking: player.future_ranking
-      , displayOrder: 1800
-    }
 
 type DisplayPlayers = Array DisplayPlayer
 

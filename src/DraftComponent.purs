@@ -14,7 +14,6 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff)
-import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
 import Halogen (ClassName(..), liftAff)
 import Halogen as H
@@ -22,26 +21,11 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Mutation (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, sortOptions, toggleFilter)
+
 import Styles.Draft (cellStyle)
-import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, transformToDisplayPlayers)
+import Mutation (fetchPlayers, fetchRankings, filterActivePlayers, mergeAndSortPlayers, sortDisplayPlayers, sortOptions, toggleFilter) 
+import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, SortOption, State) 
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt)
-
-data Query a = GetState (State -> a)
-
-type State = {
-    allPlayers :: PlayersMap
-  , displayPlayers :: DisplayPlayers
-  , filterInputs :: Array String
-  , currentSort :: SortOption
-  , loading :: Boolean
-  , error :: Maybe String
-  , sortChangeFlag :: Boolean
-  , sortOrder :: Boolean
-  , dragIndex :: Maybe Int
-  , dropIndex :: Maybe Int
-  , manualOrdering :: Boolean 
-}
 
 initialState :: State
 initialState = {
@@ -92,7 +76,7 @@ handleAction = case _ of
         H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
         H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
 
-      Right playersMap -> do
+      Right _ -> do
         rankingResult <- liftAff $ fetchRankings AW.request
         case rankingResult of
           Left err -> do
@@ -100,48 +84,40 @@ handleAction = case _ of
             H.modify_ \s -> s { error = Just $ "Error fetching rankings: " <> err, loading = false }
 
           Right rankings -> do
-            let defaultSort = "'23 Points"
-            let newPlayersMap = mergePlayerData playersMap rankings
-            let newDisplayPlayers = sortDisplayPlayers defaultSort false $ transformToDisplayPlayers newPlayersMap
-            H.modify_ \s -> s { allPlayers = newPlayersMap, displayPlayers = newDisplayPlayers, loading = false }
+            let newState = mergeAndSortPlayers initialState rankings "'23 Points"
+            H.put newState
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
 
-  DataFetched playersMap rankings -> do
+  DataFetched _ rankings -> do
       oldState <- H.get
-      let defaultSort = "'23 Points"
-      let newPlayersMap = mergePlayerData (PlayersMap playersMap) rankings
-      let newDisplayPlayers = sortDisplayPlayers defaultSort false $ transformToDisplayPlayers newPlayersMap
-      H.put $ oldState { allPlayers = newPlayersMap, displayPlayers = newDisplayPlayers }
+      let newState = mergeAndSortPlayers oldState rankings "'23 Points"
+      H.put newState
 
   ResetFilters -> do
     oldState <- H.get
-    H.modify_ \s -> s { filterInputs = [], displayPlayers = transformToDisplayPlayers oldState.allPlayers }
-
+    let newState = filterActivePlayers [] oldState{ filterInputs = [], manualOrdering = false }
+    H.put newState
 
   ZeroFilters -> do
     oldState <- H.get
-    let newFilters = [""]
-    let filteredPlayersMap = filterActivePlayers newFilters oldState.allPlayers
-    let filteredDisplayPlayers = transformToDisplayPlayers filteredPlayersMap
-    H.modify_ \s -> s { filterInputs = newFilters, displayPlayers = filteredDisplayPlayers }
+    let newState = filterActivePlayers [""] oldState{ filterInputs = [""], manualOrdering = false }
+    H.put newState
 
   TogglePositionFilter posCode -> do
     oldState <- H.get
     let newFilters = toggleFilter posCode oldState.filterInputs
-    let filteredPlayersMap = filterActivePlayers newFilters oldState.allPlayers
-    let filteredDisplayPlayers = transformToDisplayPlayers filteredPlayersMap
-    H.modify_ \s -> s { filterInputs = newFilters, displayPlayers = filteredDisplayPlayers }
+    let newState = filterActivePlayers newFilters oldState{ filterInputs = newFilters }
+    H.put newState
 
   SortBy newSort -> do
     oldState <- H.get
-    let sortedDisplayPlayers = sortDisplayPlayers newSort oldState.sortOrder oldState.displayPlayers
-    H.modify_ \s -> s { currentSort = newSort, displayPlayers = sortedDisplayPlayers }
+    let newState = sortDisplayPlayers newSort oldState.sortOrder oldState
+    H.put newState
 
   InvertSort -> do
     oldState <- H.get
-    let newSortOrder = not oldState.sortOrder
-    let reSortedDisplayPlayers = sortDisplayPlayers oldState.currentSort newSortOrder oldState.displayPlayers
-    H.modify_ \s -> s { sortOrder = newSortOrder, displayPlayers = reSortedDisplayPlayers }
+    let newState = sortDisplayPlayers oldState.currentSort (not oldState.sortOrder) oldState
+    H.put newState
 
   StartDrag index -> H.modify_ \s -> s { dragIndex = Just index, manualOrdering = true }
   EndDrag -> H.modify_ \s -> s { dragIndex = Nothing, dropIndex = Nothing, manualOrdering = false }
@@ -150,7 +126,6 @@ handleAction = case _ of
     case oldState.dragIndex of
       Just dragIdx -> do
         let updatedPlayers = movePlayer dragIdx index oldState.displayPlayers
-        H.liftEffect $ CONSOLE.log "After:" <> logShow updatedPlayers
         H.modify_ \s -> s { displayPlayers = updatedPlayers, dragIndex = Nothing, dropIndex = Nothing, manualOrdering = false }
       Nothing -> pure unit
 

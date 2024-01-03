@@ -1,9 +1,5 @@
 module Mutation
-  ( RequestFunction
-  , SortOption
-  , SortValue(..)
-  , compareMaybes
-  , fetchPlayers
+  ( fetchPlayers
   , fetchRankings
   , filterActivePlayers
   , fromSortableList
@@ -16,12 +12,13 @@ module Mutation
   , sortPlayersBy
   , toSortableList
   , toggleFilter
+  , transformToDisplayPlayers
   )
   where
 
 import Prelude
 
-import Affjax (Error, Request, Response, defaultRequest, printError)
+import Affjax (defaultRequest, printError)
 import Affjax.ResponseFormat (json, string)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
@@ -32,16 +29,19 @@ import Data.Int (toNumber)
 import Data.Int as DI
 import Data.List (List)
 import Data.List as List
+import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
 import Data.String (trim)
 import Data.Tuple (Tuple(..), snd)
 import Effect.Aff (Aff)
-import Types.Player (ActivePlayers(..), DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, parseRankingCSV, transformToDisplayPlayers)
+import Types.Player (ActivePlayers(..), DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, RequestFunction, SortOption, SortValue(..), State, compareMaybes, parseRankingCSV)
 
 -- Fetching
-type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
+getPlayersMap :: PlayersMap -> Map String Player
+getPlayersMap (PlayersMap map) = map
+
 
 fetchPlayers :: RequestFunction -> Aff (Either String PlayersMap)
 fetchPlayers requestFunction = do
@@ -71,14 +71,37 @@ fetchRankings requestFunction = do
     Left err -> pure $ Left $ printError err
     Right res -> pure $ Right $ parseRankingCSV res.body
 
-mergeAndSortPlayers :: PlayersMap -> RankingCSV -> SortOption -> DisplayPlayers
-mergeAndSortPlayers playersMap rankings sortOption =
+transformToDisplayPlayers :: PlayersMap -> DisplayPlayers
+transformToDisplayPlayers (PlayersMap playersMap) =
+  map toDisplayPlayer $ Map.toUnfoldable playersMap
+  where
+    toDisplayPlayer (Tuple key player) = {
+        id: key
+      , active: player.active
+      , batSide: player.batSide
+      , currentTeam: player.currentTeam
+      , nameSlug: player.nameSlug
+      , pitchHand: player.pitchHand
+      , playerId: player.playerId
+      , primaryPosition: player.primaryPosition
+      , useLastName: player.useLastName
+      , useName: player.useName
+      , past_ranking: player.past_ranking
+      , past_fpts: player.past_fpts
+      , future_fpts: player.future_fpts 
+      , future_ranking: player.future_ranking
+      , displayOrder: 0
+    }
+
+mergeAndSortPlayers :: State -> RankingCSV -> SortOption -> State
+mergeAndSortPlayers state rankings sortOption =
   let
-    mergedPlayersMap = mergePlayerData playersMap rankings
+    mergedPlayersMap = mergePlayerData state.allPlayers rankings
     displayPlayers = transformToDisplayPlayers mergedPlayersMap
-    sortedDisplayPlayers = sortDisplayPlayers sortOption true displayPlayers
+    newState = state { allPlayers = mergedPlayersMap, displayPlayers = displayPlayers }
+    sortedState = sortDisplayPlayers sortOption true newState
   in
-    sortedDisplayPlayers
+    sortedState
 
 mergePlayerData :: PlayersMap -> RankingCSV -> PlayersMap
 mergePlayerData (PlayersMap playersMap) csvData = PlayersMap $ Array.foldl updatePlayerRanking playersMap csvData
@@ -96,19 +119,21 @@ mergePlayerData (PlayersMap playersMap) csvData = PlayersMap $ Array.foldl updat
       { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
       , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
 
+
 -- Filtering
 toggleFilter :: forall a. Eq a => a -> Array a -> Array a
 toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]
 
-filterActivePlayers :: Array String -> PlayersMap -> PlayersMap
-filterActivePlayers posCodes (PlayersMap playersMap) =
-  case posCodes of
-    [] -> PlayersMap playersMap
-    codes -> PlayersMap $ Map.filter (\player -> elem player.primaryPosition codes) playersMap
+filterActivePlayers :: Array String -> State -> State
+filterActivePlayers posCodes state =
+  let 
+    filteredPlayers = case posCodes of
+      [] -> state.allPlayers
+      codes -> PlayersMap $ Map.filter (\player -> elem player.primaryPosition codes) (getPlayersMap state.allPlayers)
+  in
+    state { allPlayers = filteredPlayers, displayPlayers = transformToDisplayPlayers filteredPlayers }
 
 -- Sorting
-type SortOption = String
-
 sortOptions :: Array SortOption
 sortOptions = ["Manual", "ID", "Surname", "'23 Rank", "'23 Points"]
 
@@ -132,15 +157,20 @@ sortDisplayPlayersBy sortOrder f playersArray =
   in
     Array.sortBy (\x y -> comparison (f x) (f y)) playersArray
 
-sortDisplayPlayers :: SortOption -> Boolean -> DisplayPlayers -> DisplayPlayers
-sortDisplayPlayers sortOption sortOrder players =
-  case sortOption of
-    "Manual" -> players
-    "ID" -> sortDisplayPlayersBy sortOrder (SortString <<< _.id) players
-    "Surname" -> sortDisplayPlayersBy sortOrder (SortString <<< _.useLastName) players
-    "'23 Rank" -> sortDisplayPlayersBy sortOrder (SortNumber <<< map toNumber <<< _.past_ranking) players
-    "'23 Points" -> sortDisplayPlayersBy sortOrder (SortNumber <<< _.past_fpts) players
-    _ -> players
+sortDisplayPlayers :: SortOption -> Boolean -> State -> State
+sortDisplayPlayers sortOption sortOrder state =
+  if state.manualOrdering then
+    state
+  else 
+    let
+      sortedDisplayPlayers = case sortOption of
+        "ID" -> sortDisplayPlayersBy sortOrder (SortString <<< _.id) state.displayPlayers
+        "Surname" -> sortDisplayPlayersBy sortOrder (SortString <<< _.useLastName) state.displayPlayers
+        "'23 Rank" -> sortDisplayPlayersBy sortOrder (SortNumber <<< map toNumber <<< _.past_ranking) state.displayPlayers
+        "'23 Points" -> sortDisplayPlayersBy sortOrder (SortNumber <<< _.past_fpts) state.displayPlayers
+        _ -> state.displayPlayers
+    in
+      state { displayPlayers = sortedDisplayPlayers }
 
 sortBySelectedOption :: SortOption -> Boolean -> PlayersMap -> PlayersMap
 sortBySelectedOption sortOption sortOrder playersMap =
@@ -154,28 +184,3 @@ sortBySelectedOption sortOption sortOrder playersMap =
       _ -> playersList
   in
     fromSortableList sortedList
-
-data SortValue
-  = SortString String
-  | SortNumber (Maybe Number)
-  | SortInt (Maybe Int)
-
-compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
-compareMaybes Nothing Nothing = EQ
-compareMaybes Nothing (Just _) = GT
-compareMaybes (Just _) Nothing = LT
-compareMaybes (Just a) (Just b) = compare a b
-
-instance eqSortValue :: Eq SortValue where
-  eq x y = case (Tuple x y) of
-    (Tuple (SortString a) (SortString b)) -> a == b
-    (Tuple (SortNumber ma) (SortNumber mb)) -> ma == mb
-    (Tuple (SortInt ma) (SortInt mb)) -> ma == mb
-    _ -> false
-
-instance ordSortValue :: Ord SortValue where
-  compare x y = case (Tuple x y) of
-    (Tuple (SortString a) (SortString b)) -> compare a b
-    (Tuple (SortNumber ma) (SortNumber mb)) -> compareMaybes ma mb
-    (Tuple (SortInt ma) (SortInt mb)) -> compareMaybes (map toNumber ma) (map toNumber mb)
-    _ -> EQ
