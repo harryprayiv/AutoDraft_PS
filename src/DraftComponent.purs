@@ -7,11 +7,11 @@ import Prelude
 
 import Affjax.Web (request) as AW
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
-import Data.Array (elem)
+import Data.Array (deleteAt, elem, index, mapWithIndex, splitAt)
 import Data.Either (Either(..))
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as CONSOLE
@@ -37,6 +37,8 @@ type State = {
   , error :: Maybe String
   , sortChangeFlag :: Boolean
   , sortOrder :: Boolean
+  , dragIndex :: Maybe Int
+  , dropIndex :: Maybe Int
 }
 
 initialState :: State
@@ -49,6 +51,8 @@ initialState = {
   , error:  Nothing
   , sortChangeFlag:  false
   , sortOrder: false
+  , dragIndex: Nothing
+  , dropIndex: Nothing
 }
 
 data Action
@@ -60,6 +64,9 @@ data Action
   | Initialize
   | HandleError String
   | DataFetched (Map String Player) RankingCSV
+  | StartDrag Int
+  | EndDrag
+  | DropPlayer Int
   
 rankPlayersComponent :: forall q i m. MonadAff m => H.Component q i Void m
 rankPlayersComponent = 
@@ -133,6 +140,16 @@ handleAction = case _ of
     let reSortedDisplayPlayers = sortDisplayPlayers oldState.currentSort newSortOrder oldState.displayPlayers
     H.modify_ \s -> s { sortOrder = newSortOrder, displayPlayers = reSortedDisplayPlayers }
 
+  StartDrag index -> H.modify_ \s -> s { dragIndex = Just index }
+  EndDrag -> H.modify_ \s -> s { dragIndex = Nothing, dropIndex = Nothing }
+  DropPlayer index -> do
+    oldState <- H.get
+    case oldState.dragIndex of
+      Just dragIdx -> do
+        let updatedPlayers = movePlayer dragIdx index oldState.displayPlayers
+        H.modify_ \s -> s { displayPlayers = updatedPlayers, dragIndex = Nothing, dropIndex = Nothing }
+      Nothing -> pure unit
+
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
 
@@ -184,10 +201,16 @@ render state =
 columnNames :: Array String
 columnNames = ["ID ", "First ", "Last ", "Team ", "Pitch ", "Bat ", "Pos ", "Active ", "'23 Rank ", "'23 Points ", "NameSlug "]
 
-renderPlayer :: forall m. MonadAff m => DisplayPlayer -> H.ComponentHTML Action () m
-renderPlayer player = 
-  HH.tr_
-    [ HH.td [ CSS.style cellStyle ] [ HH.text $ show player.playerId ]
+renderPlayer :: forall m. MonadAff m => Int -> DisplayPlayer -> H.ComponentHTML Action () m
+renderPlayer index player = 
+  HH.tr
+    [ HE.onDragStart $ \_ -> StartDrag index
+    , HE.onDragOver $ \_ -> DropPlayer index
+    , HE.onDragEnd $ \_ -> EndDrag
+    , HP.draggable true
+    ]
+    [
+      HH.td [ CSS.style cellStyle ] [ HH.text $ show player.playerId ]
     , HH.td [CSS.style cellStyle] [HH.text player.useName]
     , HH.td [ CSS.style cellStyle ] [ HH.text player.useLastName ]
     , HH.td [ CSS.style cellStyle ] [ HH.text $ getTeamDisplayValue player.currentTeam ]    
@@ -204,8 +227,18 @@ playersTable :: forall m. MonadAff m => DisplayPlayers -> H.ComponentHTML Action
 playersTable players =
   HH.table_
     [ HH.thead_ [ HH.tr_ $ map (\name -> HH.th_ [ HH.text name ]) columnNames ]
-    , HH.tbody_ $ map renderPlayer players
+    , HH.tbody_ $ mapWithIndex renderPlayer players
     ]
+
+movePlayer :: Int -> Int -> DisplayPlayers -> DisplayPlayers
+movePlayer from to players =
+  let { before, after } = splitAt to players
+      movedPlayer = index players from
+  in case movedPlayer of
+       Just player ->
+         let adjustedAfter = fromMaybe after $ deleteAt (from - if from < to then 0 else to) after
+         in before <> [player] <> adjustedAfter
+       Nothing -> players
 
 sortDropdown :: forall m. MonadAff m => SortOption -> H.ComponentHTML Action () m
 sortDropdown currentSort = 
