@@ -70,13 +70,11 @@ instance ordSortValue :: Ord SortValue where
     (Tuple (SortInt ma) (SortInt mb)) -> compareMaybes (map toNumber ma) (map toNumber mb)
     _ -> EQ
 
-
 compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
 compareMaybes Nothing Nothing = EQ
 compareMaybes Nothing (Just _) = GT
 compareMaybes (Just _) Nothing = LT
 compareMaybes (Just a) (Just b) = compare a b
-
 
 type State = {
     allPlayers :: PlayersMap
@@ -91,7 +89,6 @@ type State = {
   , dropIndex :: Maybe Int
   , manualOrdering :: Boolean 
 }
-
 
 type DisplayPlayer = {
     id :: String

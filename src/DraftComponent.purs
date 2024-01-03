@@ -76,15 +76,14 @@ handleAction = case _ of
         H.liftEffect $ CONSOLE.log $ "Error fetching players: " <> err
         H.modify_ \s -> s { error = Just $ "Error fetching players: " <> err, loading = false }
 
-      Right _ -> do
+      Right playersMap -> do
         rankingResult <- liftAff $ fetchRankings AW.request
         case rankingResult of
           Left err -> do
             H.liftEffect $ CONSOLE.log $ "Error fetching rankings: " <> err
             H.modify_ \s -> s { error = Just $ "Error fetching rankings: " <> err, loading = false }
-
           Right rankings -> do
-            let newState = mergeAndSortPlayers initialState rankings "'23 Points"
+            let newState = mergeAndSortPlayers (initialState { allPlayers = playersMap }) rankings "'23 Points"
             H.put newState
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
 
