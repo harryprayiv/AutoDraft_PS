@@ -27,6 +27,7 @@ import Data.Argonaut.Decode.Error (printJsonDecodeError)
 import Data.Array (elem, filter, (\\))
 import Data.Array as Array
 import Data.Either (Either(..))
+import Data.Int (toNumber)
 import Data.Int as DI
 import Data.List (List)
 import Data.List as List
@@ -34,9 +35,10 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
 import Data.String (trim)
-import Data.Tuple (Tuple, snd)
+import Data.Tuple (Tuple(..), snd)
 import Effect.Aff (Aff)
 import Types.Player (ActivePlayers(..), DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, parseRankingCSV, transformToDisplayPlayers)
+import Util.DraftUtils (showAsInt)
 
 -- Fetching
 type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
@@ -74,7 +76,7 @@ mergeAndSortPlayers playersMap rankings sortOption =
   let
     mergedPlayersMap = mergePlayerData playersMap rankings
     displayPlayers = transformToDisplayPlayers mergedPlayersMap
-    sortedDisplayPlayers = sortDisplayPlayers sortOption displayPlayers
+    sortedDisplayPlayers = sortDisplayPlayers sortOption true displayPlayers
   in
     sortedDisplayPlayers
 
@@ -127,38 +129,72 @@ toSortableList (PlayersMap playersMap) = Map.toUnfoldable playersMap
 fromSortableList :: List (Tuple String Player) -> PlayersMap
 fromSortableList = PlayersMap <<< Map.fromFoldable
 
-sortPlayersBy :: forall a. Ord a => (Player -> Maybe a) -> List (Tuple String Player) -> List (Tuple String Player)
-sortPlayersBy f playersList =
-  List.sortBy (\x y -> compareMaybes (f (snd x)) (f (snd y))) playersList
+sortPlayersBy :: forall a. Ord a => Boolean -> (Player -> Maybe a) -> List (Tuple String Player) -> List (Tuple String Player)
+sortPlayersBy sortOrder f playersList =
+  let
+    comparison = if sortOrder then compareMaybes else flip compareMaybes
+  in
+    List.sortBy (\x y -> comparison (f (snd x)) (f (snd y))) playersList
+
+sortDisplayPlayersBy :: Boolean -> (DisplayPlayer -> SortValue) -> DisplayPlayers -> DisplayPlayers
+sortDisplayPlayersBy sortOrder f playersArray =
+  let
+    comparison = if sortOrder then compare else flip compare
+  in
+    Array.sortBy (\x y -> comparison (f x) (f y)) playersArray
 
 compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
 compareMaybes Nothing Nothing = EQ
-compareMaybes Nothing (Just _) = LT
-compareMaybes (Just _) Nothing = GT
+compareMaybes Nothing (Just _) = GT
+compareMaybes (Just _) Nothing = LT
 compareMaybes (Just a) (Just b) = compare a b
 
-sortDisplayPlayersBy :: forall a. Ord a => (DisplayPlayer -> Maybe a) -> DisplayPlayers -> DisplayPlayers
-sortDisplayPlayersBy f playersArray =
-  Array.sortBy (\x y -> compareMaybes (f x) (f y)) playersArray
-
-sortDisplayPlayers :: SortOption -> DisplayPlayers -> DisplayPlayers
-sortDisplayPlayers sortOption players =
+sortDisplayPlayers :: SortOption -> Boolean -> DisplayPlayers -> DisplayPlayers
+sortDisplayPlayers sortOption sortOrder players =
   case sortOption of
-    "ID" -> sortDisplayPlayersBy (Just <<< _.id) players
-    "Surname" -> sortDisplayPlayersBy (Just <<< _.useLastName) players
-    "'23 Rank" -> sortDisplayPlayersBy _.past_ranking players
-    "'23 Points" -> sortDisplayPlayersBy _.past_fpts players
-    _ -> players -- Default case, could be unsorted or sorted by a default field
+    "ID" -> sortDisplayPlayersBy sortOrder (SortString <<< _.id) players
+    "Surname" -> sortDisplayPlayersBy sortOrder (SortString <<< _.useLastName) players
+    "'23 Rank" -> sortDisplayPlayersBy sortOrder (SortNumber <<< map toNumber <<< _.past_ranking) players
+    "'23 Points" -> sortDisplayPlayersBy sortOrder (SortNumber <<< _.past_fpts) players
+    _ -> players
+ 
+translateZeroRanking :: DisplayPlayer -> Maybe Int
+translateZeroRanking player = case player.past_ranking of
+  Just n -> Just  n  
+  Nothing -> Just 0     
 
-sortBySelectedOption :: SortOption -> PlayersMap -> PlayersMap
-sortBySelectedOption sortOption playersMap =
+translateZeroPoints :: DisplayPlayer -> Maybe Number
+translateZeroPoints player = case player.past_fpts of
+  Just n -> Just n
+  Nothing -> Just 0.0  
+
+sortBySelectedOption :: SortOption -> Boolean -> PlayersMap -> PlayersMap
+sortBySelectedOption sortOption sortOrder playersMap =
   let
     playersList = toSortableList playersMap
     sortedList = case sortOption of
-      "ID" -> sortPlayersBy (Just <<< _.playerId) playersList
-      "Surname" -> sortPlayersBy (Just <<< _.useLastName) playersList
-      "'23 Rank" -> sortPlayersBy _.past_ranking playersList
-      "'23 Points" -> sortPlayersBy _.past_fpts playersList
+      "ID" -> sortPlayersBy sortOrder (Just <<< _.playerId) playersList
+      "Surname" -> sortPlayersBy sortOrder (Just <<< _.useLastName) playersList
+      "'23 Rank" -> sortPlayersBy sortOrder _.past_ranking playersList
+      "'23 Points" -> sortPlayersBy sortOrder _.past_fpts playersList
       _ -> playersList
   in
     fromSortableList sortedList
+
+data SortValue
+  = SortString String
+  | SortNumber (Maybe Number)
+  | SortInt (Maybe Int)
+
+instance ordSortValue :: Ord SortValue where
+  compare (Tuple x y) = case (Tuple x y) of
+    (Tuple (SortString a) (SortString b)) -> compare a b
+    (Tuple (SortString Nothing) (SortString (Just _))) -> GT
+    (Tuple (SortString (Just _)) (SortString Nothing)) -> LT
+    (Tuple (SortNumber ma) (SortNumber mb)) -> compareMaybes ma mb
+    (Tuple (SortNumber Nothing) (SortNumber (Just _))) -> GT
+    (Tuple (SortNumber (Just _)) (SortNumber Nothing)) -> LT
+    (Tuple (SortInt ma) (SortInt mb)) -> compareMaybes (map toNumber ma) (map toNumber mb)
+    (Tuple (SortInt Nothing) (SortInt (Just _))) -> GT
+    (Tuple (SortInt (Just _)) (SortInt Nothing)) -> LT
+    _ -> EQ

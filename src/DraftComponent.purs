@@ -3,7 +3,6 @@ module DraftComponent
   )
   where
 
-import Mutation (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, sortOptions, toggleFilter)
 import Prelude
 
 import Affjax.Web (request) as AW
@@ -22,6 +21,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Mutation (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, sortOptions, toggleFilter)
 import Styles.Draft (cellStyle)
 import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, transformToDisplayPlayers)
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt)
@@ -36,6 +36,7 @@ type State = {
   , loading :: Boolean
   , error :: Maybe String
   , sortChangeFlag :: Boolean
+  , sortOrder :: Boolean
 }
 
 initialState :: State
@@ -47,6 +48,7 @@ initialState = {
   , loading:  true
   , error:  Nothing
   , sortChangeFlag:  false
+  , sortOrder: false
 }
 
 data Action
@@ -54,6 +56,7 @@ data Action
   | ResetFilters
   | ZeroFilters
   | SortBy SortOption
+  | InvertSort
   | Initialize
   | HandleError String
   | DataFetched (Map String Player) RankingCSV
@@ -87,17 +90,17 @@ handleAction = case _ of
             H.modify_ \s -> s { error = Just $ "Error fetching rankings: " <> err, loading = false }
 
           Right rankings -> do
-            let defaultSort = "ID"
+            let defaultSort = "'23 Points"
             let newPlayersMap = mergePlayerData playersMap rankings
-            let newDisplayPlayers = sortDisplayPlayers defaultSort $ transformToDisplayPlayers newPlayersMap -- Transforms and sorts the player data
+            let newDisplayPlayers = sortDisplayPlayers defaultSort false $ transformToDisplayPlayers newPlayersMap
             H.modify_ \s -> s { allPlayers = newPlayersMap, displayPlayers = newDisplayPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
 
   DataFetched playersMap rankings -> do
       oldState <- H.get
-      let defaultSort = "ID"
+      let defaultSort = "'23 Points"
       let newPlayersMap = mergePlayerData (PlayersMap playersMap) rankings
-      let newDisplayPlayers = sortDisplayPlayers defaultSort $ transformToDisplayPlayers newPlayersMap
+      let newDisplayPlayers = sortDisplayPlayers defaultSort false $ transformToDisplayPlayers newPlayersMap
       H.put $ oldState { allPlayers = newPlayersMap, displayPlayers = newDisplayPlayers }
 
   ResetFilters -> do
@@ -117,9 +120,15 @@ handleAction = case _ of
     H.modify_ \s -> s { filterInputs = newFilters, displayPlayers = filteredDisplayPlayers }
 
   SortBy newSort -> do
-      oldState <- H.get
-      let sortedDisplayPlayers = sortDisplayPlayers newSort oldState.displayPlayers
-      H.modify_ \s -> s { currentSort = newSort, displayPlayers = sortedDisplayPlayers }
+    oldState <- H.get
+    let sortedDisplayPlayers = sortDisplayPlayers newSort oldState.sortOrder oldState.displayPlayers
+    H.modify_ \s -> s { currentSort = newSort, displayPlayers = sortedDisplayPlayers }
+
+  InvertSort -> do
+    oldState <- H.get
+    let newSortOrder = not oldState.sortOrder -- toggle the sort order
+    let reSortedDisplayPlayers = sortDisplayPlayers oldState.currentSort newSortOrder oldState.displayPlayers
+    H.modify_ \s -> s { sortOrder = newSortOrder, displayPlayers = reSortedDisplayPlayers }
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
@@ -173,6 +182,7 @@ render state =
     , resetButton
     , noneButton 
     , sortDropdown state.currentSort
+    , invertButton
     , playersTable state.displayPlayers
     ]
 
@@ -210,6 +220,15 @@ sortDropdown currentSort =
                       [ HP.value option
                       , HP.selected $ option == currentSort
                       ] [ HH.text option ]) sortOptions
+
+invertButton :: forall m. MonadAff m => H.ComponentHTML Action () m
+invertButton =
+  HH.button
+    [ HP.type_ HP.ButtonButton
+    , HE.onClick $ \_ -> InvertSort
+    , HP.classes [HH.ClassName "invert-button"]
+    ]
+    [ HH.text "invert" ]
 
 -- showPlayersMap :: PlayersMap -> String
 -- showPlayersMap (PlayersMap playersMap) =

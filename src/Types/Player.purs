@@ -74,7 +74,7 @@ transformToDisplayPlayers (PlayersMap playersMap) =
       , past_fpts: player.past_fpts
       , future_fpts: player.future_fpts 
       , future_ranking: player.future_ranking
-      , displayOrder: 0
+      , displayOrder: 1800
     }
 
 type DisplayPlayers = Array DisplayPlayer
