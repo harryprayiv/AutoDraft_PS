@@ -25,7 +25,7 @@ import Affjax (Error, Request, Response, defaultRequest, printError)
 import Affjax.ResponseFormat (json, string)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
-import Data.Array (elem, filter, (\\))
+import Data.Array (elem, (\\))
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Int (toNumber)
@@ -64,7 +64,7 @@ fetchPlayers requestFunction = do
 fetchRankings :: RequestFunction -> Aff (Either String RankingCSV)
 fetchRankings requestFunction = do
   response <- requestFunction $ defaultRequest 
-    { url = "./testData/fake_Rankings.csv"
+    { url = "./testData//fake_2023_Rankings.csv"
     , responseFormat = string 
     }
   case response of
@@ -101,21 +101,26 @@ mergePlayerData (PlayersMap playersMap) csvData = PlayersMap $ Array.foldl updat
 toggleFilter :: forall a. Eq a => a -> Array a -> Array a
 toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]
 
-filterActivePlayers :: forall a10 t12.
-  Eq a10 => Array a10
-            -> Array
-                 { primaryPosition :: a10
-                 | t12
-                 }
-               -> Array
-                    { primaryPosition :: a10
-                    | t12
-                    }
-filterActivePlayers posCodes displayPlayers =
-  case posCodes of
-    [] -> displayPlayers
-    codes -> filter (\player -> elem player.primaryPosition codes) displayPlayers
+-- filterActivePlayers :: forall a10 t12.
+--   Eq a10 => Array a10
+--             -> Array
+--                  { primaryPosition :: a10
+--                  | t12
+--                  }
+--                -> Array
+--                     { primaryPosition :: a10
+--                     | t12
+--                     }
+-- filterActivePlayers posCodes displayPlayers =
+--   case posCodes of
+--     [] -> displayPlayers
+--     codes -> filter (\player -> elem player.primaryPosition codes) displayPlayers
 
+filterActivePlayers :: Array String -> PlayersMap -> PlayersMap
+filterActivePlayers posCodes (PlayersMap playersMap) =
+  case posCodes of
+    [] -> PlayersMap playersMap
+    codes -> PlayersMap $ Map.filter (\player -> elem player.primaryPosition codes) playersMap
 
 -- Sorting
 type SortOption = String

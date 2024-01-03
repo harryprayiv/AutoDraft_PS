@@ -21,7 +21,6 @@ import Data.String.Common (split, replace)
 import Data.String.Pattern (Replacement(..))
 import Data.Tuple (Tuple(..), fst)
 import Debug (class DebugWarning, spyWith)
--- import Player (PlayersMap(..))
 
 type PosLookup = Tuple String String 
 

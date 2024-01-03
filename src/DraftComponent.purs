@@ -105,18 +105,21 @@ handleAction = case _ of
 
   ResetFilters -> do
     oldState <- H.get
-    H.modify_ \s -> s { filterInputs = [], displayPlayers = oldState.displayPlayers }
+    H.modify_ \s -> s { filterInputs = [], displayPlayers = transformToDisplayPlayers oldState.allPlayers }
+
 
   ZeroFilters -> do
     oldState <- H.get
     let newFilters = [""]
-    let filteredDisplayPlayers = filterActivePlayers newFilters oldState.displayPlayers
+    let filteredPlayersMap = filterActivePlayers newFilters oldState.allPlayers
+    let filteredDisplayPlayers = transformToDisplayPlayers filteredPlayersMap
     H.modify_ \s -> s { filterInputs = newFilters, displayPlayers = filteredDisplayPlayers }
 
   TogglePositionFilter posCode -> do
     oldState <- H.get
     let newFilters = toggleFilter posCode oldState.filterInputs
-    let filteredDisplayPlayers = filterActivePlayers newFilters oldState.displayPlayers
+    let filteredPlayersMap = filterActivePlayers newFilters oldState.allPlayers
+    let filteredDisplayPlayers = transformToDisplayPlayers filteredPlayersMap
     H.modify_ \s -> s { filterInputs = newFilters, displayPlayers = filteredDisplayPlayers }
 
   SortBy newSort -> do
@@ -126,20 +129,12 @@ handleAction = case _ of
 
   InvertSort -> do
     oldState <- H.get
-    let newSortOrder = not oldState.sortOrder -- toggle the sort order
+    let newSortOrder = not oldState.sortOrder
     let reSortedDisplayPlayers = sortDisplayPlayers oldState.currentSort newSortOrder oldState.displayPlayers
     H.modify_ \s -> s { sortOrder = newSortOrder, displayPlayers = reSortedDisplayPlayers }
 
   HandleError errorMsg -> 
     H.modify_ \s -> s { error = Just errorMsg, loading = false }
-
--- updatePlayersView :: State -> State
--- updatePlayersView currentState =
---   let
---     filteredDisplayPlayers = filterActivePlayers currentState.filterInputs currentState.displayPlayers
---     sortedFilteredDisplayPlayers = sortDisplayPlayers currentState.currentSort filteredDisplayPlayers
---   in
---     currentState { displayPlayers = sortedFilteredDisplayPlayers }
 
 positionButtons :: forall m. MonadAff m => State -> H.ComponentHTML Action () m
 positionButtons state =
@@ -229,46 +224,3 @@ invertButton =
     , HP.classes [HH.ClassName "invert-button"]
     ]
     [ HH.text "invert" ]
-
--- showPlayersMap :: PlayersMap -> String
--- showPlayersMap (PlayersMap playersMap) =
---   let
---     showPlayer :: String -> Player -> String
---     showPlayer key player = "{ Key: " <> key <> ", Player: " <> show player <> " }"
-
---     playersList :: List (Tuple String Player)
---     playersList = Map.toUnfoldable playersMap
-
---     maybeNonEmptyPlayersList :: Maybe (NonEmptyList (Tuple String Player))
---     maybeNonEmptyPlayersList = toNonEmptyArray playersList
-
---     showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
---     showNonEmptyPlayers Nothing = "Empty"
---     showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
---   in "[" <> showNonEmptyPlayers maybeNonEmptyPlayersList <> "]"
-
--- toListNEL :: forall a. NonEmptyList a -> List a
--- toListNEL nel = toList nel
-
--- showNonEmptyPlayers :: Maybe (NonEmptyList (Tuple String Player)) -> String
--- showNonEmptyPlayers Nothing = "Empty"
--- showNonEmptyPlayers (Just nel) = intercalate ", " (map (uncurry showPlayersMap) (toListNEL nel))
-
--- toNonEmptyArray :: forall a. Array a -> Maybe (NonEmpty Array a)
--- toNonEmptyArray arr = case Array.uncons arr of
---   Nothing -> Nothing
---   Just { head: x, tail: xs } -> Just (x :| xs)
-
--- spyHalogenState :: DebugWarning => String -> State -> State
--- spyHalogenState msg state = 
---   let
---     stateString = "{ allPlayers: " <> showPlayersMap state.allPlayers
---                    <> ", players: " <> showPlayersMap state.players
---                    <> ", filterInputs: " <> show state.filterInputs
---                    <> ", currentSort: " <> show state.currentSort
---                    <> ", loading: " <> show state.loading
---                    <> ", error: " <> show state.error
---                    <> ", sortChangeFlag: " <> show state.sortChangeFlag
---                    <> " }"
---   in
---     spyWith msg (\_ -> stateString) state                      
