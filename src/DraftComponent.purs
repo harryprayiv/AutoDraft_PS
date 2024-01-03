@@ -14,6 +14,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff)
+import Effect.Class.Console (logShow)
 import Effect.Console as CONSOLE
 import Halogen (ClassName(..), liftAff)
 import Halogen as H
@@ -39,6 +40,7 @@ type State = {
   , sortOrder :: Boolean
   , dragIndex :: Maybe Int
   , dropIndex :: Maybe Int
+  , manualOrdering :: Boolean 
 }
 
 initialState :: State
@@ -53,6 +55,7 @@ initialState = {
   , sortOrder: false
   , dragIndex: Nothing
   , dropIndex: Nothing
+  , manualOrdering: false 
 }
 
 data Action
@@ -140,14 +143,15 @@ handleAction = case _ of
     let reSortedDisplayPlayers = sortDisplayPlayers oldState.currentSort newSortOrder oldState.displayPlayers
     H.modify_ \s -> s { sortOrder = newSortOrder, displayPlayers = reSortedDisplayPlayers }
 
-  StartDrag index -> H.modify_ \s -> s { dragIndex = Just index }
-  EndDrag -> H.modify_ \s -> s { dragIndex = Nothing, dropIndex = Nothing }
+  StartDrag index -> H.modify_ \s -> s { dragIndex = Just index, manualOrdering = true }
+  EndDrag -> H.modify_ \s -> s { dragIndex = Nothing, dropIndex = Nothing, manualOrdering = false }
   DropPlayer index -> do
     oldState <- H.get
     case oldState.dragIndex of
       Just dragIdx -> do
         let updatedPlayers = movePlayer dragIdx index oldState.displayPlayers
-        H.modify_ \s -> s { displayPlayers = updatedPlayers, dragIndex = Nothing, dropIndex = Nothing }
+        H.liftEffect $ CONSOLE.log "After:" <> logShow updatedPlayers
+        H.modify_ \s -> s { displayPlayers = updatedPlayers, dragIndex = Nothing, dropIndex = Nothing, manualOrdering = false }
       Nothing -> pure unit
 
   HandleError errorMsg -> 

@@ -96,25 +96,9 @@ mergePlayerData (PlayersMap playersMap) csvData = PlayersMap $ Array.foldl updat
       { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
       , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
 
-
 -- Filtering
 toggleFilter :: forall a. Eq a => a -> Array a -> Array a
 toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]
-
--- filterActivePlayers :: forall a10 t12.
---   Eq a10 => Array a10
---             -> Array
---                  { primaryPosition :: a10
---                  | t12
---                  }
---                -> Array
---                     { primaryPosition :: a10
---                     | t12
---                     }
--- filterActivePlayers posCodes displayPlayers =
---   case posCodes of
---     [] -> displayPlayers
---     codes -> filter (\player -> elem player.primaryPosition codes) displayPlayers
 
 filterActivePlayers :: Array String -> PlayersMap -> PlayersMap
 filterActivePlayers posCodes (PlayersMap playersMap) =
@@ -126,7 +110,7 @@ filterActivePlayers posCodes (PlayersMap playersMap) =
 type SortOption = String
 
 sortOptions :: Array SortOption
-sortOptions = ["ID", "Surname", "'23 Rank", "'23 Points"]
+sortOptions = ["Manual", "ID", "Surname", "'23 Rank", "'23 Points"]
 
 toSortableList :: PlayersMap -> List (Tuple String Player)
 toSortableList (PlayersMap playersMap) = Map.toUnfoldable playersMap
@@ -151,12 +135,13 @@ sortDisplayPlayersBy sortOrder f playersArray =
 sortDisplayPlayers :: SortOption -> Boolean -> DisplayPlayers -> DisplayPlayers
 sortDisplayPlayers sortOption sortOrder players =
   case sortOption of
+    "Manual" -> players
     "ID" -> sortDisplayPlayersBy sortOrder (SortString <<< _.id) players
     "Surname" -> sortDisplayPlayersBy sortOrder (SortString <<< _.useLastName) players
     "'23 Rank" -> sortDisplayPlayersBy sortOrder (SortNumber <<< map toNumber <<< _.past_ranking) players
     "'23 Points" -> sortDisplayPlayersBy sortOrder (SortNumber <<< _.past_fpts) players
     _ -> players
- 
+
 sortBySelectedOption :: SortOption -> Boolean -> PlayersMap -> PlayersMap
 sortBySelectedOption sortOption sortOrder playersMap =
   let
