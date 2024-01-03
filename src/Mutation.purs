@@ -1,6 +1,7 @@
 module Mutation
   ( RequestFunction
   , SortOption
+  , SortValue(..)
   , compareMaybes
   , fetchPlayers
   , fetchRankings
@@ -38,7 +39,6 @@ import Data.String (trim)
 import Data.Tuple (Tuple(..), snd)
 import Effect.Aff (Aff)
 import Types.Player (ActivePlayers(..), DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, parseRankingCSV, transformToDisplayPlayers)
-import Util.DraftUtils (showAsInt)
 
 -- Fetching
 type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
@@ -143,12 +143,6 @@ sortDisplayPlayersBy sortOrder f playersArray =
   in
     Array.sortBy (\x y -> comparison (f x) (f y)) playersArray
 
-compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
-compareMaybes Nothing Nothing = EQ
-compareMaybes Nothing (Just _) = GT
-compareMaybes (Just _) Nothing = LT
-compareMaybes (Just a) (Just b) = compare a b
-
 sortDisplayPlayers :: SortOption -> Boolean -> DisplayPlayers -> DisplayPlayers
 sortDisplayPlayers sortOption sortOrder players =
   case sortOption of
@@ -158,16 +152,6 @@ sortDisplayPlayers sortOption sortOrder players =
     "'23 Points" -> sortDisplayPlayersBy sortOrder (SortNumber <<< _.past_fpts) players
     _ -> players
  
-translateZeroRanking :: DisplayPlayer -> Maybe Int
-translateZeroRanking player = case player.past_ranking of
-  Just n -> Just  n  
-  Nothing -> Just 0     
-
-translateZeroPoints :: DisplayPlayer -> Maybe Number
-translateZeroPoints player = case player.past_fpts of
-  Just n -> Just n
-  Nothing -> Just 0.0  
-
 sortBySelectedOption :: SortOption -> Boolean -> PlayersMap -> PlayersMap
 sortBySelectedOption sortOption sortOrder playersMap =
   let
@@ -186,15 +170,22 @@ data SortValue
   | SortNumber (Maybe Number)
   | SortInt (Maybe Int)
 
+compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
+compareMaybes Nothing Nothing = EQ
+compareMaybes Nothing (Just _) = GT
+compareMaybes (Just _) Nothing = LT
+compareMaybes (Just a) (Just b) = compare a b
+
+instance eqSortValue :: Eq SortValue where
+  eq x y = case (Tuple x y) of
+    (Tuple (SortString a) (SortString b)) -> a == b
+    (Tuple (SortNumber ma) (SortNumber mb)) -> ma == mb
+    (Tuple (SortInt ma) (SortInt mb)) -> ma == mb
+    _ -> false
+
 instance ordSortValue :: Ord SortValue where
-  compare (Tuple x y) = case (Tuple x y) of
+  compare x y = case (Tuple x y) of
     (Tuple (SortString a) (SortString b)) -> compare a b
-    (Tuple (SortString Nothing) (SortString (Just _))) -> GT
-    (Tuple (SortString (Just _)) (SortString Nothing)) -> LT
     (Tuple (SortNumber ma) (SortNumber mb)) -> compareMaybes ma mb
-    (Tuple (SortNumber Nothing) (SortNumber (Just _))) -> GT
-    (Tuple (SortNumber (Just _)) (SortNumber Nothing)) -> LT
     (Tuple (SortInt ma) (SortInt mb)) -> compareMaybes (map toNumber ma) (map toNumber mb)
-    (Tuple (SortInt Nothing) (SortInt (Just _))) -> GT
-    (Tuple (SortInt (Just _)) (SortInt Nothing)) -> LT
     _ -> EQ
