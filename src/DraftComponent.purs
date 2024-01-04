@@ -21,9 +21,9 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Mutation (SortOption, fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, sortOptions, toggleFilter)
+import Mutation (fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, toggleFilter) 
 import Styles.Draft (cellStyle)
-import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, transformToDisplayPlayers)
+import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, SortOption, sortOptions, transformToDisplayPlayers) 
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt)
 
 data Query a = GetState (State -> a)

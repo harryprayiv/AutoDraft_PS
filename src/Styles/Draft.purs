@@ -1,4 +1,10 @@
-module Styles.Draft where
+module Styles.Draft
+  ( activeButtonStyle
+  , buttonStyle
+  , cellStyle
+  , resetButtonStyle
+  )
+  where
 
 import Prelude
 

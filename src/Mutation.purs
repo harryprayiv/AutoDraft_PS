@@ -1,9 +1,5 @@
 module Mutation
-  ( RequestFunction
-  , SortOption
-  , SortValue(..)
-  , compareMaybes
-  , fetchPlayers
+  ( fetchPlayers
   , fetchRankings
   , filterActivePlayers
   , fromSortableList
@@ -12,7 +8,6 @@ module Mutation
   , sortBySelectedOption
   , sortDisplayPlayers
   , sortDisplayPlayersBy
-  , sortOptions
   , sortPlayersBy
   , toSortableList
   , toggleFilter
@@ -21,7 +16,7 @@ module Mutation
 
 import Prelude
 
-import Affjax (Error, Request, Response, defaultRequest, printError)
+import Affjax (defaultRequest, printError)
 import Affjax.ResponseFormat (json, string)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Error (printJsonDecodeError)
@@ -36,13 +31,11 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), isNothing)
 import Data.Number as DN
 import Data.String (trim)
-import Data.Tuple (Tuple(..), snd)
+import Data.Tuple (Tuple, snd)
 import Effect.Aff (Aff)
-import Types.Player (ActivePlayers(..), DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, parseRankingCSV, transformToDisplayPlayers)
+import Types.Player (ActivePlayers(..), DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, RequestFunction, SortOption, SortValue(..), compareMaybes, parseRankingCSV, transformToDisplayPlayers)
 
 -- Fetching
-type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
-
 fetchPlayers :: RequestFunction -> Aff (Either String PlayersMap)
 fetchPlayers requestFunction = do
   response <- requestFunction $ defaultRequest
@@ -96,25 +89,9 @@ mergePlayerData (PlayersMap playersMap) csvData = PlayersMap $ Array.foldl updat
       { past_ranking = if isNothing maybeRanking then player.past_ranking else maybeRanking
       , past_fpts = if isNothing maybeFPTS then player.past_fpts else maybeFPTS }
 
-
 -- Filtering
 toggleFilter :: forall a. Eq a => a -> Array a -> Array a
 toggleFilter x arr = if elem x arr then arr \\ [x] else arr <> [x]
-
--- filterActivePlayers :: forall a10 t12.
---   Eq a10 => Array a10
---             -> Array
---                  { primaryPosition :: a10
---                  | t12
---                  }
---                -> Array
---                     { primaryPosition :: a10
---                     | t12
---                     }
--- filterActivePlayers posCodes displayPlayers =
---   case posCodes of
---     [] -> displayPlayers
---     codes -> filter (\player -> elem player.primaryPosition codes) displayPlayers
 
 filterActivePlayers :: Array String -> PlayersMap -> PlayersMap
 filterActivePlayers posCodes (PlayersMap playersMap) =
@@ -123,11 +100,6 @@ filterActivePlayers posCodes (PlayersMap playersMap) =
     codes -> PlayersMap $ Map.filter (\player -> elem player.primaryPosition codes) playersMap
 
 -- Sorting
-type SortOption = String
-
-sortOptions :: Array SortOption
-sortOptions = ["ID", "Surname", "'23 Rank", "'23 Points"]
-
 toSortableList :: PlayersMap -> List (Tuple String Player)
 toSortableList (PlayersMap playersMap) = Map.toUnfoldable playersMap
 
@@ -169,28 +141,3 @@ sortBySelectedOption sortOption sortOrder playersMap =
       _ -> playersList
   in
     fromSortableList sortedList
-
-data SortValue
-  = SortString String
-  | SortNumber (Maybe Number)
-  | SortInt (Maybe Int)
-
-compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
-compareMaybes Nothing Nothing = EQ
-compareMaybes Nothing (Just _) = GT
-compareMaybes (Just _) Nothing = LT
-compareMaybes (Just a) (Just b) = compare a b
-
-instance eqSortValue :: Eq SortValue where
-  eq x y = case (Tuple x y) of
-    (Tuple (SortString a) (SortString b)) -> a == b
-    (Tuple (SortNumber ma) (SortNumber mb)) -> ma == mb
-    (Tuple (SortInt ma) (SortInt mb)) -> ma == mb
-    _ -> false
-
-instance ordSortValue :: Ord SortValue where
-  compare x y = case (Tuple x y) of
-    (Tuple (SortString a) (SortString b)) -> compare a b
-    (Tuple (SortNumber ma) (SortNumber mb)) -> compareMaybes ma mb
-    (Tuple (SortInt ma) (SortInt mb)) -> compareMaybes (map toNumber ma) (map toNumber mb)
-    _ -> EQ
