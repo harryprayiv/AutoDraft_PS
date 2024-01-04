@@ -44,7 +44,7 @@ initialState = {
     allPlayers:  PlayersMap Map.empty
   , displayPlayers:  []
   , filterInputs:  []
-  , currentSort:  "ID"
+  , currentSort:  "'23 Points"
   , loading:  true
   , error:  Nothing
   , sortChangeFlag:  false

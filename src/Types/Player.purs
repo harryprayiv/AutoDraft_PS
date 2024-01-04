@@ -60,8 +60,8 @@ data SortValue
 
 compareMaybes :: forall a. Ord a => Maybe a -> Maybe a -> Ordering
 compareMaybes Nothing Nothing = EQ
-compareMaybes Nothing (Just _) = GT
-compareMaybes (Just _) Nothing = LT
+compareMaybes Nothing (Just _) = LT
+compareMaybes (Just _) Nothing = GT
 compareMaybes (Just a) (Just b) = compare a b
 
 instance eqSortValue :: Eq SortValue where
