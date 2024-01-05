@@ -225,7 +225,7 @@ myStylesheet = stylesheet $ do
 userSelectStyle :: String -> CSS
 userSelectStyle val = do
   -- Use the property directly without Selector
-  "user-select" ? value val
+  "user-select" ? value val -- Could not match type String with type Selector
 
 -- Define a function to create a style property for text-indent
 textIndentStyle :: forall r i. Int -> HP.IProp (style :: String | r) i
