@@ -36,6 +36,7 @@
                     affjax-node
                     arrays
                     web-events
+                    web-uievents
                     web-html
                     web-dom
                     tuples

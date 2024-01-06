@@ -1,5 +1,4 @@
 -- | module attempting to replicate functionality from https://codepen.io/chingy/pen/Exxvpjo using Halogen and Purescript
-
 module Main where
 
 import CSS.Property
@@ -8,7 +7,8 @@ import CSS.Stylesheet
 import CSS.Text.Transform
 import Prelude
 import Web.HTML.Common
-import CSS (Rule(..), color, lighter, zIndex)
+
+import CSS (Rule(..), color, fromString, lighter, zIndex)
 import CSS as CSS
 import CSS.Background (backgroundColor, background)
 import CSS.Border (border, borderTop, solid)
@@ -21,13 +21,17 @@ import CSS.Font (bold, fontFamily, fontSize, fontWeight)
 import CSS.Geometry (top, left, width, height, padding, margin)
 import CSS.Gradient (radialGradient, circle, closestSide)
 import CSS.Property (Key(..), Literal(..), Prefixed(..), Value, value)
+import CSS.Property (value, Value, Literal(..))
+import CSS.Size (px)
 import CSS.Size (px, pct, em)
 import CSS.Stylesheet (key, rule, (?), CSS)
 import CSS.Text (letterSpacing)
 import CSS.Text.Transform (uppercase, capitalize)
 import CSS.TextAlign (center, textAlign)
 import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
+import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.String (Pattern(..))
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Halogen (ClassName(..))
@@ -35,28 +39,35 @@ import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML (HTML)
 import Halogen.HTML as HH
-import Halogen.HTML.CSS (stylesheet)
 import Halogen.HTML.CSS (style)
+import Halogen.HTML.CSS (stylesheet)
 import Halogen.HTML.Elements (div, element)
-import Halogen.HTML.Elements as HE
+import Halogen.HTML.Elements as HEL
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import Web.DOM (Element)
-import CSS.Property (value, Value, Literal(..))
-import CSS.Size (px)
-import Data.String (Pattern(..))
+import Web.UIEvent.MouseEvent (MouseEvent(..), clientX, clientY)
+
+type DragState = 
+  { index :: Maybe Int
+  , originalX :: Int
+  , originalY :: Int
+  , currentX :: Int
+  , currentY :: Int
+  }
 
 type State = 
   { rows :: Array String
-  , dragging :: Maybe Int
+  , dragState :: DragState
+  , dragOverIndex :: Maybe Int
   }
 
 data Action
-  = StartDrag Int
-  | DragOver Int 
+  = StartDrag Int Int Int  -- include the starting x and y positions
+  | MoveDrag Int Int       -- include the new x and y positions
+  | DragOver Int           -- include the index of the row being dragged over
   | EndDrag
-  | Drop Int
 
 initialState :: State
 initialState =
@@ -67,7 +78,8 @@ initialState =
           , "Ronald Mayo - Plant Etiologist"
           , "Trey Woolley - Maxillofacial Surgeon"
           ]
-  , dragging: Nothing
+  , dragState: { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0 }
+  , dragOverIndex: Nothing
   }
 
 component :: forall q i o m. H.Component HH.HTML q i o m
@@ -94,42 +106,49 @@ render state =
         ]
     ]
 
-renderRow :: forall m. MonadAff m => Int -> String -> Maybe Int -> H.ComponentHTML Action () m
-renderRow index row dragging =
+renderRow :: forall m. MonadAff m => State -> Int -> String -> Maybe Int -> H.ComponentHTML Action () m
+renderRow state index row dragging = 
   HH.tr
-    [ HP.classes $ ClassName <$> ["draggable-table__row"] <> if dragging == Just index then ["is-dragging"] else []
-    , fold $ userSelectStyle "none" <> textIndentStyle "50px"
-    , HE.onDragStart $ HE.input (StartDrag index)
-    , HE.onDragEnd $ HE.input EndDrag
+    [ HP.classes $ ClassName <$> ["draggable-table__row"] <> 
+        if dragging == Just index then ["is-dragging"] 
+        else if Just index == state.dragOverIndex then ["drag-over"] 
+        else []
+    , HE.onMouseDown $ handleMouseDown index
+    , HE.onMouseMove handleMouseMove
+    , HE.onMouseUp $ const [HEL.input EndDrag]
+    , HE.onDragOver $ const [HEL.input (DragOver index)]
     , HP.draggable true
     ]
     $ map renderCell (splitAt 15 row)
-  where
-    renderCell :: String -> H.ComponentHTML Action () m
-    renderCell content = HH.td_ [ HH.text content ]
+
+handleMouseDown :: forall m. Int -> MouseEvent -> HP.IProp (onMouseDown :: MouseEvent | m) Action
+handleMouseDown index event = HEL.input (StartDrag index (clientX event) (clientY event))
+
+handleMouseMove :: forall m. MouseEvent -> HP.IProp (onMouseMove :: MouseEvent | m) Action
+handleMouseMove event = HEL.input (MoveDrag (clientX event) (clientY event))    
+
+renderCell :: forall m. MonadAff m => Int -> String -> H.ComponentHTML Action () m
+renderCell index content = 
+  HH.td 
+    [ HP.class_ (HH.ClassName "table-cell") ]
+    [ HH.text content ]  
 
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action o m Unit
-handleAction action = case action of
-  StartDrag index ->
-    H.modify_ (\state -> state { dragging = Just index })
-  DragOver index ->
-    pure unit
-  EndDrag ->
-    H.modify_ (\state -> state { dragging = Nothing })
-  Drop index -> do
-    oldState <- H.get
-    case oldState.dragging of
-      Just draggingIndex -> do
-        let updatedRows = moveRow draggingIndex index oldState.rows
-        H.modify_ (\state -> state { rows = updatedRows, dragging = Nothing })
-      Nothing ->
-        pure unit
+handleAction action = 
+  case action of
+    StartDrag index x y -> do
+      H.modify_ (\s -> s { dragState = { index: Just index, originalX: x, originalY: y, currentX: x, currentY: y }})
+    MoveDrag x y -> do
+      H.modify_ (\s -> s { dragState = s.dragState { currentX: x, currentY: y }})
+    DragOver index -> do
+      H.modify_ (\s -> s { dragOverIndex = Just index })
+    EndDrag -> do
+      H.modify_ (\s -> s { dragState = initialState.dragState, dragOverIndex = Nothing })
 
 main :: Effect Unit
 main = HA.runHalogenAff do
   body <- HA.awaitBody
   runUI component unit body
-
 
 moveRow :: Int -> Int -> Array String -> Array String
 moveRow from to rows =
@@ -139,7 +158,31 @@ moveRow from to rows =
   in
     insertAt to draggedRow rowsWithoutDragged
 
--- CSS rules
+-- Common CSS rules
+commonStyles :: CSS
+commonStyles = do
+  "html, body" ? do
+    padding (px 0)
+    margin (px 0)
+    width (pct 100)
+    height (pct 100)
+    backgroundColor (rgba 203 56 233 1)
+    background (radialGradient (circle closestSide) [ ((rgba 203 56 233 1) pct 0), ((rgba 132 47 168 1) pct 100) ])
+
+userSelectStyle :: String -> CSS
+userSelectStyle val = do
+  star ? do
+    key (Key (fromString "user-select")) val
+
+textIndentStyle :: Int -> CSS
+textIndentStyle val = do
+  star ? do
+    key (Key (fromString "text-indent")) (px (toNumber val))
+
+-- Render the stylesheet in a Halogen component
+renderStylesheet :: forall p i. HTML p i
+renderStylesheet = div [] [ myStylesheet ]
+
 myStylesheet :: forall p i. HTML p i
 myStylesheet = stylesheet $ do
   "*" ? do
@@ -163,6 +206,8 @@ myStylesheet = stylesheet $ do
     textAlign center
     color white
 
+  ".drag-over" ? do
+    backgroundColor (rgba 220 220 220 1)
 
   -- Draggable Table
   ".draggable-table" ? do
@@ -220,19 +265,3 @@ myStylesheet = stylesheet $ do
 
         "td" ? do
           color (rgba 255 230 131 1)
-
--- Define a function to create a style rule for user-select
-userSelectStyle :: String -> CSS
-userSelectStyle val = do
-  -- Use the property directly without Selector
-  "user-select" ? value val -- Could not match type String with type Selector
-
--- Define a function to create a style property for text-indent
-textIndentStyle :: forall r i. Int -> HP.IProp (style :: String | r) i
-textIndentStyle val = style $ do
-  -- Use the property directly without Literal
-  "text-indent" ? px val
-
--- Render the stylesheet in a Halogen component
-renderStylesheet :: forall p i. HTML p i
-renderStylesheet = div [] [ myStylesheet ]
