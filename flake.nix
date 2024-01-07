@@ -46,7 +46,7 @@
                     argonaut-codecs
                     ordered-collections
                     halogen-vdom
-                    halogen-formless
+                    halogen-store
                     string-parsers
                     css
                     halogen-css
