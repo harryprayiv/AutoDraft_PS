@@ -150,7 +150,6 @@ renderRow state index row dragging =
     ]
     $ map renderCell (splitAt 15 row)
 
-
 handleMouseDown :: Int -> MouseEvent -> Action
 handleMouseDown index mouseEvent =
   StartDrag index (DOM.clientX mouseEvent) (DOM.clientY mouseEvent)
