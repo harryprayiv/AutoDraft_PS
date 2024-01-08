@@ -18,6 +18,7 @@ import CSS.Cursor (cursor)
 import CSS.Display (absolute, opacity, position)
 import CSS.Font (GenericFontFamily(..), bold, fontFamily, fontSize, fontWeight, sansSerif, serif)
 import CSS.Geometry (top, left, width, height, padding, margin)
+import CSS.Geometry (top, left, width, height, padding, margin) as Geo
 import CSS.Gradient (radialGradient, circle, closestSide)
 import CSS.Property (Key(..), Literal(..), Prefixed(..), Value, value)
 import CSS.Selector (element) as CSel
@@ -28,11 +29,12 @@ import CSS.Text (letterSpacing)
 import CSS.Text.Transform (uppercase, capitalize)
 import CSS.TextAlign (center, textAlign)
 import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
+import Data.Function (identity)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.NonEmpty (NonEmpty, (:|))
 import Data.String (Pattern(..))
-import Data.Function (identity)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Aff.Class (class MonadAff)
@@ -43,6 +45,7 @@ import Halogen as H
 import Halogen.Aff as HA
 import Halogen.Aff.Driver as H
 import Halogen.HTML (HTML)
+import Halogen.HTML (HTML)
 import Halogen.HTML as HH
 import Halogen.HTML.CSS (style)
 import Halogen.HTML.CSS (stylesheet)
@@ -52,17 +55,16 @@ import Halogen.HTML.Events as HEV
 import Halogen.HTML.Properties as HP
 import Halogen.Store.Connect (Connected, connect)
 import Halogen.Store.Monad (class MonadStore, StoreT, runStoreT, updateStore)
-import Halogen.Store.Select (Selector, select)
-import Halogen.Store.Select (selectEq, Selector) as Store
+import Halogen.Store.Select (selectEq, select, Selector) as Store
 import Halogen.VDom.Driver (runUI)
 import Halogen.VDom.Types (ElemName(..))
 import Web.DOM (Element)
 import Web.Event.Event (Event, EventType(..))
 import Web.UIEvent.MouseEvent (MouseEvent(..), clientX, clientY, toEvent)
 import Web.UIEvent.MouseEvent (MouseEvent, clientX, clientY)
-import Web.UIEvent.MouseEvent as DOM
 import Web.UIEvent.MouseEvent as MouseEvent
 import Web.UIEvent.MouseEvent.EventTypes as MouseEvent
+
 
 type Input = Unit
 
@@ -141,7 +143,7 @@ renderRow connected index row dragging =
         if Just index == connected.context.dragState.index then ["is-dragging"] 
         else if Just index == connected.context.dragOverIndex then ["drag-over"] 
         else []
-    , HEV.onMouseDown $ \event -> handleMouseDownEvent event connected.dispatch
+    , HEV.onMouseDown $ \event -> handleMouseDownEvent (toEvent event) connected.dispatch
     , HEV.onMouseMove $ \event -> handleMouseMoveEvent event connected.dispatch
     , HEV.onMouseUp $ const $ connected.dispatch EndDrag
     , HEV.onDragOver $ const $ connected.dispatch $ DragOver index
@@ -151,14 +153,14 @@ renderRow connected index row dragging =
   where
     handleMouseDownEvent :: Event -> (Action -> Unit) -> Unit
     handleMouseDownEvent event dispatch = 
-      case DOM.fromEvent event of
-        Just mouseEvent -> dispatch $ StartDrag index (DOM.clientX mouseEvent) (DOM.clientY mouseEvent)
+      case MouseEvent.fromEvent event of
+        Just mouseEvent -> dispatch $ StartDrag index (MouseEvent.clientX mouseEvent) (MouseEvent.clientY mouseEvent)
         Nothing -> dispatch EndDrag -- Fallback in case of an event type mismatch
 
     handleMouseMoveEvent :: Event -> (Action -> Unit) -> Unit
     handleMouseMoveEvent event dispatch =
-      case DOM.fromEvent event of
-        Just mouseEvent -> dispatch $ MoveDrag (DOM.clientX mouseEvent) (DOM.clientY mouseEvent)
+      case MouseEvent.fromEvent event of
+        Just mouseEvent -> dispatch $ MoveDrag (MouseEvent.clientX mouseEvent) (MouseEvent.clientY mouseEvent)
         Nothing -> dispatch EndDrag -- Fallback in case of an event type mismatch
 
 

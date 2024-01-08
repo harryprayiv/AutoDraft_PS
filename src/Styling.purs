@@ -1,20 +1,21 @@
 module Styling
-  ( 
-  --   bodySelector
-  -- , commonStyles
-  -- , htmlSelector
-  -- , myStylesheet
-  renderStylesheet
-  -- , textIndentStyle
-  -- , userSelectStyle
+  ( bodySelector
+  , commonStyles
+  , htmlSelector
+  , myStylesheet
+  , renderStylesheet
+  , textIndentStyle
+  , userSelectStyle
   )
   where
-import Prelude
+
 import CSS.Property
 import CSS.Selector
 import CSS.Stylesheet
 import CSS.Text.Transform
+import Prelude
 import Web.HTML.Common
+import Data.Tuple (Tuple(..))
 import CSS (Rule(..), color, fromString, lighter, zIndex)
 import CSS as CSS
 import CSS.Background (backgroundColor, background)
@@ -37,6 +38,7 @@ import CSS.Text.Transform (uppercase, capitalize)
 import CSS.TextAlign (center, textAlign)
 import Data.Int (toNumber)
 import Data.NonEmpty (NonEmpty, (:|))
+import Data.Tuple (Tuple)
 import Halogen.HTML (HTML)
 import Halogen.HTML.CSS (style)
 import Halogen.HTML.CSS (stylesheet)
@@ -47,16 +49,16 @@ import Halogen.HTML.Properties as HP
 import Halogen.Store.Connect (Connected, connect)
 import Halogen.Store.Monad (class MonadStore, StoreT, runStoreT, updateStore)
 
-
--- commonStyles :: CSS
--- commonStyles = do
---   "html, body" ? do
---     padding (px 0)
---     margin (px 0)
---     width (pct 100)
---     height (pct 100)
---     backgroundColor (rgba 203 56 233 1)
---     background (radialGradient (circle closestSide) [ ((rgba 203 56 233 1) pct 0), ((rgba 132 47 168 1) pct 100) ])
+commonStyles :: CSS
+commonStyles = do
+  deep htmlSelector bodySelector ? do
+    padding (px 0.0)
+    margin (px 0.0)
+    key (Key (fromString "width")) (pct 100.0)  -- Set the width property
+    key (Key (fromString "height")) (pct 100.0) -- Set the height property
+    height (pct 100.0)
+    backgroundColor (rgba 203 56 233 1.0)
+    background (radialGradient (circle closestSide) (circle closestSide) [ (Tuple (rgba 203 56 233 1.0) (pct 0.0)), (Tuple (rgba 132 47 168 1.0) (pct 100.0)) ])
 
 userSelectStyle :: String -> CSS
 userSelectStyle val = do
@@ -70,7 +72,7 @@ textIndentStyle val = do
 
 -- -- Render the stylesheet in a Halogen component
 renderStylesheet :: forall p i. HTML p i
-renderStylesheet = div [] [ myStylesheet ]
+renderStylesheet = HEL.div [] [ myStylesheet ]
 
 htmlSelector :: Selector
 htmlSelector = CSel.element "html"
@@ -94,7 +96,7 @@ myStylesheet = stylesheet $ do
     -- background (radialGradient (circle closestSide) [ ((rgba 203 56 233 1.0) pct 0.0), ((rgba 132 47 168 1.0) pct 100) ])
     
   -- Apply styles to paragraphs
-  element "p" ? do
+  HEL.element "p" ? do
     fontSize (em 0.75)
     fontWeight bold
     position absolute
@@ -133,32 +135,33 @@ myStylesheet = stylesheet $ do
       opacity 1
 
   -- Apply styles to table heads
-  deep (byClass "draggable-table") (element "thead") ? do
-    element "th" ? do
+  deep (byClass "draggable-table") (HEL.element "thead") ? do
+    HEL.element "th" ? do
       height (px 25)
       fontWeight bold
       textTransform capitalize
       padding (px 10)
 
   -- Apply styles to table body
-  deep (byClass "draggable-table") (element "tbody") ? do
-    element "tr" ? do
+  deep (byClass "draggable-table") (HEL.element "tbody") ? do
+    HEL.element "tr" ? do
       cursor "grabbing"
 
-      element "td" ? do
+      HEL.element "td" ? do
         fontSize (em 0.95)
         fontWeight lighter
         textTransform capitalize
         padding (px 10)
         borderTop (px 1) solid (rgba 245 245 245 1)
 
-    element "tr:nth-child(even)" ? do
+    HEL.element "tr:nth-child(even)" ? do
       backgroundColor (rgba 247 247 247 1)
 
-    element "tr:nth-child(odd)" ? do
+    HEL.element "tr:nth-child(odd)" ? do
       backgroundColor white
 
-    element "tr.is-dragging" ? do
+    HEL.element "tr.is-dragging" ? do
       backgroundColor (rgba 241 196 15 1)
-      element "td" ? do
+      HEL.element "td" ? do
         color (rgba 255 230 131 1)
+
