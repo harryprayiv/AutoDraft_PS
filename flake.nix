@@ -49,7 +49,8 @@
                     halogen-store
                     string-parsers
                     css
-                    halogen-css
+                    tecton
+                    tecton-halogen
                     ordered-set
                   ];
 
