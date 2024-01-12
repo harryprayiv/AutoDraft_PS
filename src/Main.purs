@@ -7,27 +7,27 @@ import CSS.Stylesheet
 import CSS.Text.Transform
 import Prelude
 import Web.HTML.Common
-import CSS (Rule(..), color, fromString, lighter, zIndex)
-import CSS as CSS
-import CSS.Background (backgroundColor, background)
-import CSS.Border (border, borderTop, solid)
-import CSS.Box (boxShadow)
-import CSS.Color (rgba, white)
-import CSS.Common (none)
-import CSS.Cursor (cursor)
-import CSS.Display (absolute, opacity, position)
-import CSS.Font (GenericFontFamily(..), bold, fontFamily, fontSize, fontWeight, sansSerif, serif)
-import CSS.Geometry (top, left, width, height, padding, margin)
-import CSS.Geometry (top, left, width, height, padding, margin) as Geo
-import CSS.Gradient (radialGradient, circle, closestSide)
-import CSS.Property (Key(..), Literal(..), Prefixed(..), Value, value)
-import CSS.Selector (element) as CSel
-import CSS.Size (px)
-import CSS.Size (px, pct, em)
-import CSS.Stylesheet (key, rule, (?), CSS)
-import CSS.Text (letterSpacing)
-import CSS.Text.Transform (uppercase, capitalize)
-import CSS.TextAlign (center, textAlign)
+-- import CSS (Rule(..), color, fromString, lighter, zIndex)
+-- import CSS as CSS
+-- import CSS.Background (backgroundColor, background)
+-- import CSS.Border (border, borderTop, solid)
+-- import CSS.Box (boxShadow)
+-- import CSS.Color (rgba, white)
+-- import CSS.Common (none)
+-- import CSS.Cursor (cursor)
+-- import CSS.Display (absolute, opacity, position)
+-- import CSS.Font (GenericFontFamily(..), bold, fontFamily, fontSize, fontWeight, sansSerif, serif)
+-- import CSS.Geometry (top, left, width, height, padding, margin)
+-- import CSS.Geometry (top, left, width, height, padding, margin) as Geo
+-- import CSS.Gradient (radialGradient, circle, closestSide)
+-- import CSS.Property (Key(..), Literal(..), Prefixed(..), Value, value)
+-- import CSS.Selector (element) as CSel
+-- import CSS.Size (px)
+-- import CSS.Size (px, pct, em)
+-- import CSS.Stylesheet (key, rule, (?), CSS)
+-- import CSS.Text (letterSpacing)
+-- import CSS.Text.Transform (uppercase, capitalize)
+-- import CSS.TextAlign (center, textAlign)
 import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
 import Data.Function (identity)
 import Data.Int (toNumber)
@@ -40,6 +40,7 @@ import Effect.Aff (launchAff_)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (log)
 import Effect.Unsafe (unsafePerformEffect)
+
 import Halogen (ClassName(..), ElemName(..))
 import Halogen as H
 import Halogen.Aff as HA
@@ -61,9 +62,9 @@ import Halogen.VDom.Types (ElemName(..))
 import Web.DOM (Element)
 import Web.Event.Event (Event, EventType(..))
 import Web.UIEvent.MouseEvent (MouseEvent(..), clientX, clientY, toEvent)
-import Web.UIEvent.MouseEvent (MouseEvent, clientX, clientY)
 import Web.UIEvent.MouseEvent as MouseEvent
 import Web.UIEvent.MouseEvent.EventTypes as MouseEvent
+import Styling (renderStylesheet)
 
 
 type Input = Unit
