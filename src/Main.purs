@@ -8,7 +8,6 @@ import CSS.Text.Transform
 import Prelude
 import Prelude
 import Web.HTML.Common
-
 import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
 import Data.Array (deleteAt, insertAt, (!!))
 import Data.Function (identity)
@@ -44,8 +43,9 @@ import Halogen.VDom.Driver (runUI)
 import Halogen.VDom.Types (ElemName(..))
 import Web.DOM (Element)
 import Web.Event.Event (Event, EventType(..))
+import Web.HTML.Event.DragEvent (DragEvent)
 import Web.HTML.Event.DragEvent.EventTypes as DE
-import Web.PointerEvent.PointerEvent (PointerEvent, toPointerEvent, toMouseEvent)
+import Web.PointerEvent.PointerEvent (PointerEvent, fromEvent, fromMouseEvent, toMouseEvent)
 import Web.UIEvent.MouseEvent (MouseEvent(..), clientX, clientY, toEvent)
 import Web.UIEvent.MouseEvent as MouseEvent
 import Web.UIEvent.MouseEvent.EventTypes as MET
@@ -78,6 +78,7 @@ data Action
   | MoveDrag Int Int
   | DragOver Int
   | EndDrag
+  | NoOp
 
 initialStore :: Store
 initialStore =  
@@ -88,7 +89,7 @@ initialStore =
           , "Ronald Mayo - Plant Etiologist"
           , "Trey Woolley - Maxillofacial Surgeon"
           ]
-  , dragState: { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0 }
+  , dragState: { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0, isDragging: false }
   , dragOverIndex: Nothing
   }
 
@@ -132,18 +133,6 @@ renderRow index row dragging =
     ]
     [ HH.td_ [ HH.text row ] ]
 
--- reduce :: Store -> Action -> Store
--- reduce store action = case action of
---   StartDrag index x y -> 
---     store { dragState = { index: (Just index), originalX: x, originalY: y, currentX: x, currentY: y }}
---   MoveDrag x y -> 
---     store { dragState = store.dragState { currentX: x, currentY: y }}
---   DragOver index -> 
---     store { dragOverIndex = Just index }
---   EndDrag -> 
---     store { dragState = store.dragState { index: Nothing, currentX: 0, currentY: 0 }, dragOverIndex = Nothing }
-
-
 renderCell :: forall m. MonadAff m => Int -> String -> H.ComponentHTML Action () m
 renderCell index content = 
   HH.td 
@@ -156,7 +145,6 @@ handleAction action = case action of
   MoveDrag x y -> H.modify_ $ \s -> s { dragState = s.dragState { currentX = x, currentY = y }}
   DragOver index -> H.modify_ $ \s -> s { dragOverIndex = Just index }
   EndDrag -> H.modify_ $ \s -> s { dragState = s.dragState { index = Nothing, isDragging = false }, dragOverIndex = Nothing }
-
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -171,21 +159,27 @@ moveRow from to rows =
   in
     fromMaybe rowsWithoutDragged $ insertAt to draggedRow rowsWithoutDragged
 
--- Helper functions to create event handlers
+-- Create event handlers
 onMouseDown :: forall r. (MouseEvent -> Action) -> IProp (onMouseDown :: MouseEvent | r) Action
-onMouseDown f = handler MET.mousedown (\ev -> maybe identity f (toEvent ev))
+onMouseDown f = handler MET.mousedown $ \ev ->
+  case fromEvent ev of
+    Just pe -> f (toMouseEvent pe)
+    Nothing -> NoOp
 
 onMouseMove :: forall r. (MouseEvent -> Action) -> IProp (onMouseMove :: MouseEvent | r) Action
-onMouseMove f = handler MET.mousemove (\ev -> maybe identity f (toEvent ev))
+onMouseMove f = handler MET.mousemove $ \ev -> 
+  case fromEvent ev of
+    Just pe -> f (toMouseEvent pe)
+    Nothing -> NoOp
 
 onMouseUp :: forall r. (MouseEvent -> Action) -> IProp (onMouseUp :: MouseEvent | r) Action
-onMouseUp f = handler MET.mouseup $ \ev -> 
-  case toMouseEvent ev of
-    Just me -> f me
-    Nothing -> identity unit
+onMouseUp f = handler MET.mouseup $ \ev ->
+  case fromEvent ev of
+    Just pe -> f (toMouseEvent pe)
+    Nothing -> NoOp
 
-
-
-
-onDragOver :: forall r. (MouseEvent -> Action) -> IProp (onDragOver :: MouseEvent | r) Action
-onDragOver f = handler DE.dragover (\ev -> maybe identity f (toEvent ev))
+onDragOver :: forall r. (MouseEvent -> Action) -> IProp (onDragOver :: DragEvent | r) Action
+onDragOver f = handler DE.dragover $ \ev ->
+  case fromEvent ev of
+    Just pe -> f (toMouseEvent pe)
+    Nothing -> NoOp
