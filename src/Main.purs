@@ -5,45 +5,41 @@ import CSS.Property
 import CSS.Selector
 import CSS.Stylesheet
 import CSS.Text.Transform
-import Prelude
+import Effect.Aff.Class
 import Prelude
 import Web.HTML.Common
 import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
-import Data.Array (deleteAt, insertAt, (!!))
 import Data.Function (identity)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Maybe (fromMaybe)
 import Data.NonEmpty (NonEmpty, (:|))
 import Data.String (Pattern(..))
 import Data.Tuple (Tuple(..))
-import Effect (Effect)
+import Data.Void (absurd)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
-import Effect.Aff.Class (class MonadAff)
 import Effect.Class.Console (log)
 import Effect.Unsafe (unsafePerformEffect)
-import Halogen (ClassName(..), ElemName(..))
-import Halogen as H
+import Halogen (ClassName(..), ElemName(..), HalogenM, HalogenQ)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.Aff.Driver as H
-import Halogen.HTML (HTML)
+import Halogen.Aff.Driver as HD
 import Halogen.HTML (HTML, IProp)
 import Halogen.HTML as HH
 import Halogen.HTML.Elements (div, element)
-import Halogen.HTML.Elements as HEL
-import Halogen.HTML.Events (handler)
-import Halogen.HTML.Events as HEV
+import Halogen.HTML.Elements as HHE
+import Halogen.HTML.Events (handler, onMouseDown, onMouseUp, onDragOver)
+import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Halogen.Store.Connect (Connected, connect)
-import Halogen.Store.Monad (class MonadStore, StoreT, runStoreT, updateStore)
-import Halogen.Store.Select (selectEq, select, Selector) as Store
+import Halogen.Store.Connect (Connected)
+import Halogen.Store.Select as Store
 import Halogen.VDom.Driver (runUI)
 import Halogen.VDom.Types (ElemName(..))
 import Web.DOM (Element)
 import Web.Event.Event (Event, EventType(..))
 import Web.HTML.Event.DragEvent (DragEvent)
+import Web.HTML.Event.DragEvent.EventTypes (dragover)
 import Web.HTML.Event.DragEvent.EventTypes as DE
 import Web.PointerEvent.PointerEvent (PointerEvent, fromEvent, fromMouseEvent, toMouseEvent)
 import Web.UIEvent.MouseEvent (MouseEvent(..), clientX, clientY, toEvent)
@@ -93,12 +89,22 @@ initialStore =
   , dragOverIndex: Nothing
   }
 
-component :: forall q o m. MonadAff m => H.Component q Unit o m
-component = H.mkComponent
-  { initialState: const initialStore
-  , render
-  , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
-  }
+component :: forall m. MonadAff m => H.Component HH.HTML Action Input m
+component = 
+  H.mkComponent
+    { initialState
+    , render
+    , eval: H.mkEval $ H.defaultEval
+        { handleAction = handleAction
+        , handleQuery = \_ -> pure Nothing
+        , receive = const Nothing
+        , initialize = Nothing
+        , finalize = Nothing
+        }
+    }
+
+initialState :: Input -> Store
+initialState _ = initialStore
 
 render :: forall m. Store -> H.ComponentHTML Action () m
 render state =
@@ -115,41 +121,38 @@ renderRow index row dragging =
   HH.tr
     [ HP.classes $ ClassName <$> ["draggable-table__row"] <>
         if Just index == dragging then ["is-dragging"] else []
-    , onMouseDown $ \event -> 
-        let
-          x = MouseEvent.clientX event
-          y = MouseEvent.clientY event
-        in
-          StartDrag index x y
-    , onMouseMove $ \event ->
-        let
-          x = MouseEvent.clientX event
-          y = MouseEvent.clientY event
-        in
-          MoveDrag x y
-    , onMouseUp $ const EndDrag
-    , onDragOver $ const $ DragOver index
+    , HE.onMouseDown $ \event -> StartDrag index (MouseEvent.clientX event) (MouseEvent.clientY event)
+    , HE.onMouseMove $ \event -> MoveDrag (MouseEvent.clientX event) (MouseEvent.clientY event)
+    , HE.onMouseUp $ const EndDrag
+    , HE.onDragOver $ const $ DragOver index
     , HP.draggable true
     ]
     [ HH.td_ [ HH.text row ] ]
 
-renderCell :: forall m. MonadAff m => Int -> String -> H.ComponentHTML Action () m
-renderCell index content = 
+renderCell :: forall m. String -> H.ComponentHTML Action () m
+renderCell content =
   HH.td 
     [ HP.class_ (HH.ClassName "table-cell") ]
-    [ HH.text content ]  
+    [ HH.text content ]
 
-handleAction :: forall o m. MonadAff m => Action -> H.HalogenM Store Action o m Unit
-handleAction action = case action of
-  StartDrag index x y -> H.modify_ $ \s -> s { dragState = { index: Just index, originalX: x, originalY: y, currentX: x, currentY: y, isDragging: true }}
-  MoveDrag x y -> H.modify_ $ \s -> s { dragState = s.dragState { currentX = x, currentY = y }}
-  DragOver index -> H.modify_ $ \s -> s { dragOverIndex = Just index }
-  EndDrag -> H.modify_ $ \s -> s { dragState = s.dragState { index = Nothing, isDragging = false }, dragOverIndex = Nothing }
+handleAction :: forall m. MonadAff m => Action -> H.HalogenM Store Action () Void m Unit
+handleAction action =
+  case action of
+    StartDrag index x y ->
+      H.modify_ \s -> s { dragState = { index: Just index, originalX: x, originalY: y, currentX: x, currentY: y, isDragging: true }}
+    MoveDrag x y ->
+      H.modify_ \s -> s { dragState = s.dragState { currentX = x, currentY = y }}
+    DragOver index ->
+      H.modify_ \s -> s { dragOverIndex = Just index }
+    EndDrag ->
+      H.modify_ \s -> s { dragState = s.dragState { index = Nothing, isDragging = false }, dragOverIndex = Nothing }
+    NoOp ->
+      pure unit
 
 main :: Effect Unit
-main = HA.runHalogenAff do
+main = launchAff_ do
   body <- HA.awaitBody
-  void $ H.runUI component unit body
+  void $ HD.runUI component unit body
 
 moveRow :: Int -> Int -> Array String -> Array String
 moveRow from to rows =
@@ -158,28 +161,3 @@ moveRow from to rows =
     rowsWithoutDragged = fromMaybe rows $ deleteAt from rows
   in
     fromMaybe rowsWithoutDragged $ insertAt to draggedRow rowsWithoutDragged
-
--- Create event handlers
-onMouseDown :: forall r. (MouseEvent -> Action) -> IProp (onMouseDown :: MouseEvent | r) Action
-onMouseDown f = handler MET.mousedown $ \ev ->
-  case fromEvent ev of
-    Just pe -> f (toMouseEvent pe)
-    Nothing -> NoOp
-
-onMouseMove :: forall r. (MouseEvent -> Action) -> IProp (onMouseMove :: MouseEvent | r) Action
-onMouseMove f = handler MET.mousemove $ \ev -> 
-  case fromEvent ev of
-    Just pe -> f (toMouseEvent pe)
-    Nothing -> NoOp
-
-onMouseUp :: forall r. (MouseEvent -> Action) -> IProp (onMouseUp :: MouseEvent | r) Action
-onMouseUp f = handler MET.mouseup $ \ev ->
-  case fromEvent ev of
-    Just pe -> f (toMouseEvent pe)
-    Nothing -> NoOp
-
-onDragOver :: forall r. (MouseEvent -> Action) -> IProp (onDragOver :: DragEvent | r) Action
-onDragOver f = handler DE.dragover $ \ev ->
-  case fromEvent ev of
-    Just pe -> f (toMouseEvent pe)
-    Nothing -> NoOp
