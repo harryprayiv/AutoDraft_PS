@@ -8,7 +8,6 @@ import CSS.Text.Transform
 import Effect.Aff.Class
 import Prelude
 import Web.HTML.Common
-
 import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
 import Data.Function (identity)
 import Data.Int (toNumber)
@@ -21,18 +20,10 @@ import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class.Console (log)
 import Effect.Unsafe (unsafePerformEffect)
-import Halogen (ClassName(..), ElemName(..), HalogenM, HalogenQ, HalogenIO)
-import Halogen as H
-import Halogen.Aff as HA
-import Halogen.Aff.Driver as H
-import Halogen.Aff.Driver as HD
+import Halogen (ClassName(..), ElemName(..), HalogenIO, HalogenM, HalogenQ, hoist)
 import Halogen.HTML (HTML, IProp)
-import Halogen.HTML as HH
 import Halogen.HTML.Elements (div, element)
-import Halogen.HTML.Elements as HHE
 import Halogen.HTML.Events (handler, onMouseDown, onMouseUp, onDragOver)
-import Halogen.HTML.Events as HE
-import Halogen.HTML.Properties as HP
 import Halogen.Store.Connect (Connected)
 import Halogen.Store.Select as Store
 import Halogen.VDom.Driver (runUI)
@@ -41,11 +32,22 @@ import Web.DOM (Element)
 import Web.Event.Event (Event, EventType(..))
 import Web.HTML.Event.DragEvent (DragEvent)
 import Web.HTML.Event.DragEvent.EventTypes (dragover)
-import Web.HTML.Event.DragEvent.EventTypes as DE
 import Web.PointerEvent.PointerEvent (PointerEvent, fromEvent, fromMouseEvent, toMouseEvent)
 import Web.UIEvent.MouseEvent (MouseEvent(..), clientX, clientY, toEvent)
+
+import Web.HTML.Event.DragEvent.EventTypes as DE
 import Web.UIEvent.MouseEvent as MouseEvent
 import Web.UIEvent.MouseEvent.EventTypes as MET
+
+
+import Halogen.HTML.Events as HE
+import Halogen.HTML.Elements as HHE
+import Halogen.HTML.Properties as HP
+import Halogen.HTML as HH
+import Halogen as H
+import Halogen.Aff as HA
+import Halogen.Aff.Driver as H
+import Halogen.Aff.Driver as HD
 
 type Input = Unit
 
@@ -90,12 +92,12 @@ initialStore =
   , dragOverIndex: Nothing
   }
 
-component :: forall m. MonadAff m => H.Component (HTML Action) Unit Void m
+component :: forall q i m. MonadAff m => H.Component q Unit Void m
 component = 
   H.mkComponent
     { initialState
     , render
-    , eval: H.mkEval $ H.defaultEval
+    , eval: H.mkEval H.defaultEval
         { handleAction = handleAction
         , handleQuery = \_ -> pure Nothing
         , receive = const Nothing
@@ -107,7 +109,7 @@ component =
 initialState :: Input -> Store
 initialState _ = initialStore
 
-render :: forall m. Store -> H.ComponentHTML Action () m
+render :: forall m. MonadAff m => Store -> H.ComponentHTML Action () m
 render state =
   HH.div []
     [ HH.table
@@ -150,13 +152,17 @@ handleAction action =
     NoOp ->
       pure unit
 
+
 main :: Effect Unit
-main = launchAff_ do
+main = HA.runHalogenAff do
   body <- HA.awaitBody
-  halogenIO <- HD.runUI component unit body
-  -- `halogenIO` is a HalogenIO record. You can interact with the running component using this record.
-  -- If you don't need to interact with the component, you can ignore `halogenIO`.
-  pure unit
+  runUI component {} body
+
+-- main :: Effect Unit
+-- main = launchAff_ do
+--   body <- HA.awaitBody
+--   halogenIO <- HD.runUI component unit body
+--   pure unit
 
 moveRow :: Int -> Int -> Array String -> Array String
 moveRow from to rows =
