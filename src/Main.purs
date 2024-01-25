@@ -8,6 +8,7 @@ import CSS.Text.Transform
 import Effect.Aff.Class
 import Prelude
 import Web.HTML.Common
+
 import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
 import Data.Function (identity)
 import Data.Int (toNumber)
@@ -20,7 +21,7 @@ import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class.Console (log)
 import Effect.Unsafe (unsafePerformEffect)
-import Halogen (ClassName(..), ElemName(..), HalogenM, HalogenQ)
+import Halogen (ClassName(..), ElemName(..), HalogenM, HalogenQ, HalogenIO)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.Aff.Driver as H
@@ -89,7 +90,7 @@ initialStore =
   , dragOverIndex: Nothing
   }
 
-component :: forall m. MonadAff m => H.Component HH.HTML Action Input m
+component :: forall m. MonadAff m => H.Component (HTML Action) Unit Void m
 component = 
   H.mkComponent
     { initialState
@@ -152,7 +153,10 @@ handleAction action =
 main :: Effect Unit
 main = launchAff_ do
   body <- HA.awaitBody
-  void $ HD.runUI component unit body
+  halogenIO <- HD.runUI component unit body
+  -- `halogenIO` is a HalogenIO record. You can interact with the running component using this record.
+  -- If you don't need to interact with the component, you can ignore `halogenIO`.
+  pure unit
 
 moveRow :: Int -> Int -> Array String -> Array String
 moveRow from to rows =
