@@ -1,53 +1,21 @@
 -- | module attempting to replicate functionality from https://codepen.io/chingy/pen/Exxvpjo using Halogen and Purescript
 module Main where
 
-import CSS.Property
-import CSS.Selector
-import CSS.Stylesheet
-import CSS.Text.Transform
-import Effect.Aff.Class
+import Effect.Aff.Class (class MonadAff)
 import Prelude
-import Web.HTML.Common
-import Data.Array (deleteAt, fold, insertAt, mapWithIndex, splitAt, (!!))
-import Data.Function (identity)
-import Data.Int (toNumber)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.NonEmpty (NonEmpty, (:|))
-import Data.String (Pattern(..))
-import Data.Tuple (Tuple(..))
-import Data.Void (absurd)
+import Web.HTML.Common (ClassName(..))
+import Data.Array (deleteAt, insertAt, mapWithIndex, (!!))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
-import Effect.Aff (launchAff_)
-import Effect.Class.Console (log)
-import Effect.Unsafe (unsafePerformEffect)
-import Halogen (ClassName(..), ElemName(..), HalogenIO, HalogenM, HalogenQ, hoist)
-import Halogen.HTML (HTML, IProp)
-import Halogen.HTML.Elements (div, element)
-import Halogen.HTML.Events (handler, onMouseDown, onMouseUp, onDragOver)
 import Halogen.Store.Connect (Connected)
 import Halogen.Store.Select as Store
 import Halogen.VDom.Driver (runUI)
-import Halogen.VDom.Types (ElemName(..))
-import Web.DOM (Element)
-import Web.Event.Event (Event, EventType(..))
-import Web.HTML.Event.DragEvent (DragEvent)
-import Web.HTML.Event.DragEvent.EventTypes (dragover)
-import Web.PointerEvent.PointerEvent (PointerEvent, fromEvent, fromMouseEvent, toMouseEvent)
-import Web.UIEvent.MouseEvent (MouseEvent(..), clientX, clientY, toEvent)
-
-import Web.HTML.Event.DragEvent.EventTypes as DE
 import Web.UIEvent.MouseEvent as MouseEvent
-import Web.UIEvent.MouseEvent.EventTypes as MET
-
-
 import Halogen.HTML.Events as HE
-import Halogen.HTML.Elements as HHE
 import Halogen.HTML.Properties as HP
 import Halogen.HTML as HH
-import Halogen as H
+import Halogen (Component, ComponentHTML, HalogenM, defaultEval, mkComponent, mkEval, modify_) as H
 import Halogen.Aff as HA
-import Halogen.Aff.Driver as H
-import Halogen.Aff.Driver as HD
 
 type Input = Unit
 
@@ -156,13 +124,7 @@ handleAction action =
 main :: Effect Unit
 main = HA.runHalogenAff do
   body <- HA.awaitBody
-  runUI component {} body
-
--- main :: Effect Unit
--- main = launchAff_ do
---   body <- HA.awaitBody
---   halogenIO <- HD.runUI component unit body
---   pure unit
+  runUI component unit body 
 
 moveRow :: Int -> Int -> Array String -> Array String
 moveRow from to rows =
