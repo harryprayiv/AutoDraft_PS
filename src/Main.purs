@@ -1,21 +1,23 @@
 -- | module attempting to replicate functionality from https://codepen.io/chingy/pen/Exxvpjo using Halogen and Purescript
 module Main where
 
-import Effect.Aff.Class (class MonadAff)
 import Prelude
-import Web.HTML.Common (ClassName(..))
+
 import Data.Array (deleteAt, insertAt, mapWithIndex, (!!))
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
+import Effect.Aff.Class (class MonadAff)
+import Halogen (Component, ComponentHTML, HalogenM, defaultEval, mkComponent, mkEval, modify_) as H
+import Halogen.Aff as HA
+import Halogen.HTML as HH
+import Halogen.HTML.Events as HE
+import Halogen.HTML.Properties as HP
 import Halogen.Store.Connect (Connected)
 import Halogen.Store.Select as Store
 import Halogen.VDom.Driver (runUI)
+import Web.HTML.Common (ClassName(..))
 import Web.UIEvent.MouseEvent as MouseEvent
-import Halogen.HTML.Events as HE
-import Halogen.HTML.Properties as HP
-import Halogen.HTML as HH
-import Halogen (Component, ComponentHTML, HalogenM, defaultEval, mkComponent, mkEval, modify_) as H
-import Halogen.Aff as HA
 
 type Input = Unit
 
@@ -35,7 +37,7 @@ type DragState =
   }
 
 type Store = 
-  { rows :: Array String
+  { rows :: Array (Tuple String String)
   , dragState :: DragState
   , dragOverIndex :: Maybe Int
   }
@@ -49,18 +51,18 @@ data Action
 
 initialStore :: Store
 initialStore =  
-  { rows: [ "April Douglas - Health Educator"
-          , "Salma Mcbride - Mental Health Counselor"
-          , "Kassandra Donovan - Makeup Artists"
-          , "Yosef Hartman - Theatrical and Performance"
-          , "Ronald Mayo - Plant Etiologist"
-          , "Trey Woolley - Maxillofacial Surgeon"
+  { rows: [ Tuple "April Douglas" "Health Educator"
+          , Tuple "Salma Mcbride" "Mental Health Counselor"
+          , Tuple "Kassandra Donovan" "Makeup Artists"
+          , Tuple "Yosef Hartman" "Theatrical and Performance"
+          , Tuple "Ronald Mayo" "Plant Etiologist"
+          , Tuple "Trey Woolley" "Maxillofacial Surgeon"
           ]
   , dragState: { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0, isDragging: false }
   , dragOverIndex: Nothing
   }
 
-component :: forall q i m. MonadAff m => H.Component q Unit Void m
+component :: forall q m. MonadAff m => H.Component q Unit Void m
 component = 
   H.mkComponent
     { initialState
@@ -83,12 +85,12 @@ render state =
     [ HH.table
         [ HP.class_ (HH.ClassName "draggable-table") ]
         [ HH.thead_ [ HH.tr_ [ HH.th_ [ HH.text "Name" ], HH.th_ [ HH.text "Occupation" ]]]
-        , HH.tbody_ $ mapWithIndex (\index row -> renderRow index row state.dragState.index) state.rows
+        , HH.tbody_ $ mapWithIndex (\index (Tuple name occupation) -> renderRow index name occupation state.dragState.index) state.rows
         ]
     ]
 
-renderRow :: forall m. Int -> String -> Maybe Int -> H.ComponentHTML Action () m
-renderRow index row dragging =
+renderRow :: forall m. Int -> String -> String -> Maybe Int -> H.ComponentHTML Action () m
+renderRow index name occupation dragging =
   HH.tr
     [ HP.classes $ ClassName <$> ["draggable-table__row"] <>
         if Just index == dragging then ["is-dragging"] else []
@@ -98,7 +100,8 @@ renderRow index row dragging =
     , HE.onDragOver $ const $ DragOver index
     , HP.draggable true
     ]
-    [ HH.td_ [ HH.text row ] ]
+    [ renderCell name, renderCell occupation ]
+
 
 renderCell :: forall m. String -> H.ComponentHTML Action () m
 renderCell content =
@@ -116,20 +119,36 @@ handleAction action =
     DragOver index ->
       H.modify_ \s -> s { dragOverIndex = Just index }
     EndDrag ->
-      H.modify_ \s -> s { dragState = s.dragState { index = Nothing, isDragging = false }, dragOverIndex = Nothing }
+      H.modify_ \s -> case s.dragState.index of
+        Just fromIndex -> case findDropIndex s of
+          Just toIndex -> s { rows = moveRow fromIndex toIndex s.rows
+                            , dragState = resetDragState
+                            , dragOverIndex = Nothing }
+          Nothing -> s { dragState = resetDragState, dragOverIndex = Nothing }
+        Nothing -> s
     NoOp ->
       pure unit
-
 
 main :: Effect Unit
 main = HA.runHalogenAff do
   body <- HA.awaitBody
   runUI component unit body 
 
-moveRow :: Int -> Int -> Array String -> Array String
+moveRow :: Int -> Int -> Array (Tuple String String) -> Array (Tuple String String)
 moveRow from to rows =
   let
-    draggedRow = fromMaybe "" $ rows !! from
+    draggedRow = fromMaybe (Tuple "" "") $ rows !! from
     rowsWithoutDragged = fromMaybe rows $ deleteAt from rows
   in
     fromMaybe rowsWithoutDragged $ insertAt to draggedRow rowsWithoutDragged
+
+findDropIndex :: Store -> Maybe Int
+findDropIndex store =
+  -- Implement logic to determine the new index for the dropped row
+  -- This might be based on mouse position or the `dragOverIndex`
+  store.dragOverIndex    
+
+-- Function to reset the drag state
+resetDragState :: DragState
+resetDragState = 
+  { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0, isDragging: false }
