@@ -3,12 +3,14 @@ module Main where
 
 import Prelude
 
-import Data.Array (deleteAt, insertAt, mapWithIndex, (!!))
-import Data.Maybe (Maybe(..), fromMaybe)
+import Affjax as H
+import Data.Array (deleteAt, insertAt, length, mapWithIndex, (!!))
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Halogen (Component, ComponentHTML, HalogenM, defaultEval, mkComponent, mkEval, modify_) as H
+import Halogen as HA
 import Halogen.Aff as HA
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -29,11 +31,12 @@ selectStore = Store.selectEq \store -> store
 
 type DragState = 
   { index :: Maybe Int
-  , originalX :: Int
-  , originalY :: Int
-  , currentX :: Int
-  , currentY :: Int
+  , originalMouseX :: Int
+  , originalMouseY :: Int
+  , currentMouseX :: Int
+  , currentMouseY :: Int
   , isDragging :: Boolean
+  , placeholderIndex :: Maybe Int
   }
 
 type Store = 
@@ -58,7 +61,7 @@ initialStore =
           , Tuple "Ronald Mayo" "Plant Etiologist"
           , Tuple "Trey Woolley" "Maxillofacial Surgeon"
           ]
-  , dragState: { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0, isDragging: false }
+  , dragState: { index: Nothing, originalMouseX: 0, originalMouseY: 0, currentMouseX: 0, currentMouseY: 0, isDragging: false, placeholderIndex: Nothing }
   , dragOverIndex: Nothing
   }
 
@@ -85,23 +88,27 @@ render state =
     [ HH.table
         [ HP.class_ (HH.ClassName "draggable-table") ]
         [ HH.thead_ [ HH.tr_ [ HH.th_ [ HH.text "Name" ], HH.th_ [ HH.text "Occupation" ]]]
-        , HH.tbody_ $ mapWithIndex (\index (Tuple name occupation) -> renderRow index name occupation state.dragState.index) state.rows
+        , HH.tbody_ $ mapWithIndex (\index (Tuple name occupation) -> renderRow index name occupation state) state.rows
         ]
     ]
 
-renderRow :: forall m. Int -> String -> String -> Maybe Int -> H.ComponentHTML Action () m
-renderRow index name occupation dragging =
-  HH.tr
-    [ HP.classes $ ClassName <$> ["draggable-table__row"] <>
-        if Just index == dragging then ["is-dragging"] else []
-    , HE.onMouseDown $ \event -> StartDrag index (MouseEvent.clientX event) (MouseEvent.clientY event)
-    , HE.onMouseMove $ \event -> MoveDrag (MouseEvent.clientX event) (MouseEvent.clientY event)
-    , HE.onMouseUp $ const EndDrag
-    , HE.onDragOver $ const $ DragOver index
-    , HP.draggable true
-    ]
-    [ renderCell name, renderCell occupation ]
-
+renderRow :: forall m. Int -> String -> String -> Store -> H.ComponentHTML Action () m
+renderRow index name occupation state =
+  let
+    isDragging = Just index == state.dragState.index
+    isPlaceholder = Just index == state.dragState.placeholderIndex && not isDragging
+  in
+    HH.tr
+      [ HP.classes $ ClassName <$> ["draggable-table__row"] <>
+          (if isDragging then ["is-dragging"] else []) <>
+          (if isPlaceholder then ["placeholder"] else [])
+      , HE.onMouseDown $ \event -> StartDrag index (MouseEvent.clientX event) (MouseEvent.clientY event)
+      , HE.onMouseMove $ \event -> MoveDrag (MouseEvent.clientX event) (MouseEvent.clientY event)
+      , HE.onMouseUp $ const EndDrag
+      , HE.onDragOver $ const $ DragOver index
+      , HP.draggable true
+      ]
+      [ renderCell name, renderCell occupation ]
 
 renderCell :: forall m. String -> H.ComponentHTML Action () m
 renderCell content =
@@ -110,24 +117,26 @@ renderCell content =
     [ HH.text content ]
 
 handleAction :: forall m. MonadAff m => Action -> H.HalogenM Store Action () Void m Unit
-handleAction action =
-  case action of
-    StartDrag index x y ->
-      H.modify_ \s -> s { dragState = { index: Just index, originalX: x, originalY: y, currentX: x, currentY: y, isDragging: true }}
-    MoveDrag x y ->
-      H.modify_ \s -> s { dragState = s.dragState { currentX = x, currentY = y }}
-    DragOver index ->
-      H.modify_ \s -> s { dragOverIndex = Just index }
-    EndDrag ->
-      H.modify_ \s -> case s.dragState.index of
-        Just fromIndex -> case findDropIndex s of
-          Just toIndex -> s { rows = moveRow fromIndex toIndex s.rows
-                            , dragState = resetDragState
-                            , dragOverIndex = Nothing }
-          Nothing -> s { dragState = resetDragState, dragOverIndex = Nothing }
-        Nothing -> s
-    NoOp ->
-      pure unit
+handleAction action = case action of
+  StartDrag index x y -> 
+    H.modify_ \s -> s { dragState = { index: Just index, originalMouseX: x, originalMouseY: y, currentMouseX: x, currentMouseY: y, isDragging: true, placeholderIndex: Just index }}
+  MoveDrag x y -> 
+    H.modify_ \s -> 
+      let placeholderIndex = calculateNewPlaceholderIndex x y s
+      in s { dragState = s.dragState { currentMouseX = x, currentMouseY = y, placeholderIndex = placeholderIndex }}
+  DragOver index ->
+    H.modify_ \s -> s { dragState = s.dragState { placeholderIndex = Just index }}
+  EndDrag -> do
+    newState <- H.get
+    let dragState = newState.dragState
+    case dragState.index of
+      Just fromIndex -> case dragState.placeholderIndex of
+        Just toIndex -> H.modify_ \s -> s { rows = moveRow fromIndex toIndex s.rows, dragState = resetDragState }
+        Nothing -> H.modify_ \s -> s { dragState = resetDragState }
+      Nothing -> pure unit
+  NoOp ->
+    pure unit
+
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -142,6 +151,40 @@ moveRow from to rows =
   in
     fromMaybe rowsWithoutDragged $ insertAt to draggedRow rowsWithoutDragged
 
+-- Function to update the placeholder index based on the mouse's position
+updatePlaceholderIndex :: Int -> Int -> Store -> Effect (Maybe Int)
+updatePlaceholderIndex mouseX mouseY store = do
+  let
+    numRows = length store.rows
+    draggedRowIndex = fromMaybe 0 store.dragState.index
+    calculateNewIndex i = if i < numRows
+      then do
+        rowTop <- runEffectFn1 DomUtils.getRowTop i
+        rowHeight <- runEffectFn1 DomUtils.getRowHeight i
+        let rowMid = rowTop + (rowHeight / 2)
+        if mouseY > rowMid
+          then calculateNewIndex (i + 1)
+          else pure (Just i)
+      else pure (Just (numRows - 1))
+  calculateNewIndex draggedRowIndex
+
+findDropIndex :: Store -> Maybe Int
+findDropIndex store = store.dragOverIndex
+
+calculateNewPlaceholderIndex :: Int -> Int -> Store -> Maybe Int
+calculateNewPlaceholderIndex mouseX mouseY store =
+  let
+    rowHeight = 30 -- Assume a fixed height for each row
+    offsetY = mouseY - store.dragState.originalMouseY
+    draggedRowIndex = fromMaybe 0 store.dragState.index
+    numRows = length store.rows
+    newIndex = draggedRowIndex + (offsetY `div` rowHeight)
+  in
+    if newIndex < 0 then Just 0
+    else if newIndex >= numRows then Just (numRows - 1)
+    else Just newIndex
+
+
 findDropIndex :: Store -> Maybe Int
 findDropIndex store =
   -- Implement logic to determine the new index for the dropped row
@@ -151,4 +194,4 @@ findDropIndex store =
 -- Function to reset the drag state
 resetDragState :: DragState
 resetDragState = 
-  { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0, isDragging: false }
+  { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0, isDragging: false, placeholderIndex: Nothing }
