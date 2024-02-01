@@ -2,6 +2,7 @@
 module Main where
 
 import Prelude
+import Web.DOM
 
 import Data.Array (deleteAt, insertAt, mapWithIndex, (!!))
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -11,13 +12,21 @@ import Effect.Aff.Class (class MonadAff)
 import Halogen (Component, ComponentHTML, HalogenM, defaultEval, mkComponent, mkEval, modify_) as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
+import Halogen.HTML.Events (onDragOver, onMouseDown, onMouseMove, onMouseUp)
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Store.Connect (Connected)
 import Halogen.Store.Select as Store
 import Halogen.VDom.Driver (runUI)
+import Web.DOM.Element (Element)
+import Web.DOM.Element (getBoundingClientRect, DOMRect)
+import Web.DOM.NonElementParentNode (getElementById)
 import Web.HTML.Common (ClassName(..))
-import Web.UIEvent.MouseEvent as MouseEvent
+import Web.HTML.Event.DragEvent.EventTypes (dragover)
+import Web.HTML.Event.DragEvent.EventTypes as MDE
+import Web.UIEvent.MouseEvent as MEV
+import Web.UIEvent.MouseEvent.EventTypes (mousedown, mousemove, mouseup)
+import Web.UIEvent.MouseEvent.EventTypes as MVT
 
 type Input = Unit
 
@@ -43,9 +52,9 @@ type Store =
   }
 
 data Action
-  = StartDrag Int Int Int
+  = StartDrag Int Int Int Int
   | MoveDrag Int Int
-  | DragOver Int
+  | DragOver Int Int 
   | EndDrag
   | NoOp
 
@@ -79,6 +88,18 @@ component =
 initialState :: Input -> Store
 initialState _ = initialStore
 
+-- starting with a uniform row height for simplicity
+rowHeight :: Int
+rowHeight = 50  -- Example height, adjust based on your UI
+
+-- Calculate drop index based on currentY position of the drag and uniform row height
+findDropIndex :: Int -> Maybe Int
+findDropIndex currentY =
+  let
+    rowIndex = currentY `div` rowHeight
+  in
+    Just rowIndex
+
 render :: forall m. MonadAff m => Store -> H.ComponentHTML Action () m
 render state =
   HH.div []
@@ -94,14 +115,13 @@ renderRow index name occupation dragging =
   HH.tr
     [ HP.classes $ ClassName <$> ["draggable-table__row"] <>
         if Just index == dragging then ["is-dragging"] else []
-    , HE.onMouseDown $ \event -> StartDrag index (MouseEvent.clientX event) (MouseEvent.clientY event)
-    , HE.onMouseMove $ \event -> MoveDrag (MouseEvent.clientX event) (MouseEvent.clientY event)
-    , HE.onMouseUp $ const EndDrag
-    , HE.onDragOver $ const $ DragOver index
+    , onMouseDown $ HE.handler MVT.mousedown (\event -> StartDrag index (MEV.clientX event) (MEV.clientY event))
+    , onMouseMove $ HE.handler MVT.mousemove (\event -> MoveDrag (MEV.clientX event) (MEV.clientY event))
+    , onMouseUp $ HE.handler MVT.mouseup (\_ -> EndDrag)
+    , onDragOver $ HE.handler MDE.dragover (\event -> DragOver index (MEV.clientY event))
     , HP.draggable true
     ]
     [ renderCell name, renderCell occupation ]
-
 
 renderCell :: forall m. String -> H.ComponentHTML Action () m
 renderCell content =
@@ -116,18 +136,17 @@ handleAction action =
       H.modify_ \s -> s { dragState = { index: Just index, originalX: x, originalY: y, currentX: x, currentY: y, isDragging: true }}
     MoveDrag x y ->
       H.modify_ \s -> s { dragState = s.dragState { currentX = x, currentY = y }}
-    DragOver index ->
-      H.modify_ \s -> s { dragOverIndex = Just index }
+    DragOver mouseY -> 
+      H.modify_ \s -> s { dragOverIndex = findDropIndex mouseY }
     EndDrag ->
       H.modify_ \s -> case s.dragState.index of
-        Just fromIndex -> case findDropIndex s of
+        Just fromIndex -> case s.dragOverIndex of
           Just toIndex -> s { rows = moveRow fromIndex toIndex s.rows
                             , dragState = resetDragState
                             , dragOverIndex = Nothing }
           Nothing -> s { dragState = resetDragState, dragOverIndex = Nothing }
         Nothing -> s
-    NoOp ->
-      pure unit
+    NoOp -> pure unit
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -142,13 +161,18 @@ moveRow from to rows =
   in
     fromMaybe rowsWithoutDragged $ insertAt to draggedRow rowsWithoutDragged
 
-findDropIndex :: Store -> Maybe Int
-findDropIndex store =
-  -- Implement logic to determine the new index for the dropped row
-  -- This might be based on mouse position or the `dragOverIndex`
-  store.dragOverIndex    
-
 -- Function to reset the drag state
 resetDragState :: DragState
 resetDragState = 
   { index: Nothing, originalX: 0, originalY: 0, currentX: 0, currentY: 0, isDragging: false }
+
+-- This function is conceptual and might not directly compile without proper imports and adjustments
+getElementSizeAndPosition :: String -> Effect (Maybe DOMRect)
+getElementSizeAndPosition elementId = do
+  document <- HA.selectElement
+  maybeElement <- getElementById elementId document
+  case maybeElement of
+    Just element -> do
+      rect <- getBoundingClientRect element
+      pure $ Just rect
+    Nothing -> pure Nothing  
