@@ -1,49 +1,36 @@
-module Types.Player
-  ( ActivePlayers(..)
-  , DisplayPlayer
-  , DisplayPlayers
-  , Player
-  , PlayerData
-  , PlayerEntry
-  , Players
-  , PlayersMap(..)
-  , RankingCSV
-  , RequestFunction
-  , SortOption
-  , SortValue(..)
-  , compareMaybes
-  , decodeField
-  , decodeJsonPlayer
-  , decodeJsonPlayerData
-  , parseRankingCSV
-  , sortOptions
-  , transformToDisplayPlayers
-  , unwrapPlayersMap
-  )
-  where
+module Types.Player where
 
 import Prelude
 
+import Affjax (Error, Request, Response)
+import Data.Argonaut (_Object, assoc, encodeJson, fromArray, fromObject)
 import Data.Argonaut.Core (Json, toObject)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Class (class DecodeJson)
 import Data.Argonaut.Decode.Combinators ((.:))
 import Data.Argonaut.Decode.Error (JsonDecodeError(..))
+import Data.Argonaut.Encode ((:=))
+import Data.Argonaut.Encode.Encoders (encodeArray, encodeInt, encodeString)
+import Data.Argonaut.Encode.Encoders as Encoders
+import Data.Array (mapWithIndex)
+import Data.Array as FO
 import Data.Either (Either(..))
+import Data.Foldable (all)
 import Data.Foldable (foldl)
+import Data.Int (toNumber)
+import Data.List (List(..), nub, sort)
+import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..))
 import Data.String.Common (split, replace)
 import Data.String.Pattern (Replacement(..))
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), fst, snd, uncurry)
+import Effect.Aff (Aff)
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
 import Util.DraftUtils (normalizeAndSplitLines)
-import Affjax (Error, Request, Response)
-import Data.Int (toNumber)
-import Effect.Aff (Aff)
 
 
 type RequestFunction = forall a. Request a -> Aff (Either Error (Response a))
@@ -96,35 +83,7 @@ type DisplayPlayer = {
   , displayOrder :: Int
 }
 
-transformToDisplayPlayers :: PlayersMap -> DisplayPlayers
-transformToDisplayPlayers (PlayersMap playersMap) =
-  map toDisplayPlayer $ Map.toUnfoldable playersMap
-  where
-    toDisplayPlayer (Tuple key player) = {
-        id: key
-      , active: player.active
-      , batSide: player.batSide
-      , currentTeam: player.currentTeam
-      , nameSlug: player.nameSlug
-      , pitchHand: player.pitchHand
-      , playerId: player.playerId
-      , primaryPosition: player.primaryPosition
-      , useLastName: player.useLastName
-      , useName: player.useName
-      , past_ranking: player.past_ranking
-      , past_fpts: player.past_fpts
-      , future_fpts: player.future_fpts 
-      , future_ranking: player.future_ranking
-      , displayOrder: 1800
-    }
-
 type DisplayPlayers = Array DisplayPlayer
-
-type PlayerData = 
-  { checksum :: String
-  , dataPulled :: String
-  , officialPlayers :: PlayersMap
-  }
 
 newtype PlayersMap = PlayersMap (Map String Player)
 
@@ -147,6 +106,34 @@ type Player =
 type PlayerEntry = { key :: String, playerJson :: Json }
 
 type Players = Map.Map String Player
+
+transformToDisplayPlayers :: PlayersMap -> DisplayPlayers
+transformToDisplayPlayers (PlayersMap playersMap) =
+  map toDisplayPlayer $ Map.toUnfoldable playersMap
+  where
+    toDisplayPlayer (Tuple key player) = {
+        id: key
+      , active: player.active
+      , batSide: player.batSide
+      , currentTeam: player.currentTeam
+      , nameSlug: player.nameSlug
+      , pitchHand: player.pitchHand
+      , playerId: player.playerId
+      , primaryPosition: player.primaryPosition
+      , useLastName: player.useLastName
+      , useName: player.useName
+      , past_ranking: player.past_ranking
+      , past_fpts: player.past_fpts
+      , future_fpts: player.future_fpts 
+      , future_ranking: player.future_ranking
+      , displayOrder: 1800
+    }
+
+type PlayerData = 
+  { checksum :: String
+  , dataPulled :: String
+  , officialPlayers :: PlayersMap
+  }
 
 newtype ActivePlayers = ActivePlayers PlayersMap
 
@@ -246,3 +233,49 @@ parseRankingCSV content =
     fields = map (\row -> map cleanField (split (Pattern ",") row)) rows
   in
     fields
+
+-- new parts
+type PlayerRanking = { playerId :: Int, ranking :: Int }
+
+transformAndEncodeDisplayPlayers :: DisplayPlayers -> Json
+transformAndEncodeDisplayPlayers players =
+  let playerRankings = mapWithIndex (\index player -> encodePlayerRanking player (index + 1)) players
+  in encodeJson playerRankings 
+
+validatePlayerIds :: List DisplayPlayer -> Boolean
+validatePlayerIds = all (\player -> player.playerId > 0)
+
+validateRankings :: List Int -> Boolean
+validateRankings rankings =
+  let sortedRankings = sort rankings
+      uniqueRankings = nub sortedRankings
+  in sortedRankings == uniqueRankings && List.all (\i -> i > 0) sortedRankings
+
+encodePlayersWithRanking :: List (Tuple DisplayPlayer Int) -> Either String Json
+encodePlayersWithRanking playerRankings =
+  if validatePlayerIds (map fst playerRankings) && validateRankings (map snd playerRankings)
+    then Right $ encodeArray (uncurry encodePlayerRanking) playerRankings
+    else Left "Validation failed: Player IDs must be positive and rankings must be unique and sequential."
+
+encodePlayerRanking :: DisplayPlayer -> Int -> Json
+encodePlayerRanking player ranking =
+  let
+    -- Create individual Json values for playerId and ranking
+    playerIdJson = Encoders.encodeInt player.playerId
+    rankingJson = Encoders.encodeInt ranking
+    
+    -- Construct the Json object
+    jsonMap = FO.fromFoldable 65421      [ Tuple "playerId" playerIdJson
+      , Tuple "ranking" rankingJson
+      ]
+  in
+  fromArray jsonMap
+
+{- 
+Step 3: Handling the Encoding Result
+When calling encodePlayersWithRanking, handle the Either result to deal with potential validation errors.
+
+case encodePlayersWithRanking playerRankingsList of
+  Right json -> -- Proceed with the JSON, e.g., sending it to the server
+  Left errorMsg -> -- Handle the error, e.g., log it or notify the user
+ -}

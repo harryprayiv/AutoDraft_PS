@@ -7,6 +7,7 @@ import Prelude
 
 import Affjax.Web (request) as AW
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
+import Data.Argonaut (encodeJson)
 import Data.Array (elem)
 import Data.Either (Either(..))
 import Data.Map (Map)
@@ -21,9 +22,9 @@ import Halogen.HTML as HH
 import Halogen.HTML.CSS (style) as CSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Mutation (fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, toggleFilter) 
+import Mutation (fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, toggleFilter)
 import Styles.Draft (cellStyle)
-import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, SortOption, sortOptions, transformToDisplayPlayers) 
+import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, SortOption, sortOptions, transformToDisplayPlayers)
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt)
 
 data Query a = GetState (State -> a)
@@ -98,8 +99,13 @@ handleAction = case _ of
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
   
   SubmitRanking -> do
-    oldState <- H.get
-    H.modify_ \s -> s { filterInputs = [], displayPlayers = transformToDisplayPlayers oldState.allPlayers }
+    state <- H.get
+    let json = transformAndEncodeDisplayPlayers state.displayPlayers
+    response <- liftAff $ post (defaultRequest { url = "/submit-ranking", body = Just (jsonBody json) })
+    case response of
+      Left err -> H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> show err
+      Right _ -> H.liftEffect $ CONSOLE.log "Ranking submitted successfully"
+    pure unit
 
   DataFetched playersMap rankings -> do
       oldState <- H.get
@@ -238,3 +244,19 @@ invertButton =
     , HP.classes [HH.ClassName "invert-button"]
     ]
     [ HH.text "invert" ]
+
+-- downloadJson :: forall m. MonadAff m => String -> String -> m Unit
+-- downloadJson fileName jsonStr = liftAff do
+--   win <- window
+--   doc <- document win
+--   blob <- newBlob [jsonStr] (BlobPropertyBag { type: "application/json" })
+--   url <- createObjectURL blob
+--   anchor <- createElement doc "a"
+--   case anchor of
+--     Just elem -> do
+--       let a = unsafeCoerce elem :: HTMLAnchorElement
+--       set href url a
+--       set download fileName a
+--       click a
+--       pure unit
+--     Nothing -> pure unit
