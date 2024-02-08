@@ -58,6 +58,7 @@ data Action
   | SortBy SortOption
   | InvertSort
   | Initialize
+  | SubmitRanking
   | HandleError String
   | DataFetched (Map String Player) RankingCSV
   
@@ -95,6 +96,10 @@ handleAction = case _ of
             let newDisplayPlayers = sortDisplayPlayers defaultSort false $ transformToDisplayPlayers newPlayersMap
             H.modify_ \s -> s { allPlayers = newPlayersMap, displayPlayers = newDisplayPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
+  
+  SubmitRanking -> do
+    oldState <- H.get
+    H.modify_ \s -> s { filterInputs = [], displayPlayers = transformToDisplayPlayers oldState.allPlayers }
 
   DataFetched playersMap rankings -> do
       oldState <- H.get
@@ -106,7 +111,6 @@ handleAction = case _ of
   ResetFilters -> do
     oldState <- H.get
     H.modify_ \s -> s { filterInputs = [], displayPlayers = transformToDisplayPlayers oldState.allPlayers }
-
 
   ZeroFilters -> do
     oldState <- H.get
@@ -161,6 +165,15 @@ resetButton =
     ]
     [ HH.text "Show All" ]
 
+submitButton :: forall m. MonadAff m => H.ComponentHTML Action () m
+submitButton =
+  HH.button
+    [ HP.type_ HP.ButtonButton
+    , HE.onClick $ \_ -> SubmitRanking
+    , HP.classes [HH.ClassName "submit-button"]
+    ]
+    [ HH.text "Submit" ]    
+
 noneButton :: forall m. MonadAff m => H.ComponentHTML Action () m
 noneButton =
   HH.button
@@ -178,6 +191,7 @@ render state =
     , noneButton 
     , sortDropdown state.currentSort
     , invertButton
+    , submitButton
     , playersTable state.displayPlayers
     ]
 
