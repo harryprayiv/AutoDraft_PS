@@ -3,7 +3,7 @@ module Types.Player where
 import Prelude
 
 import Affjax (Error, Request, Response)
-import Data.Argonaut (_Object, assoc, encodeJson, fromArray, fromObject)
+import Data.Argonaut (_Object, assoc, encodeJson, fromObject)
 import Data.Argonaut.Core (Json, toObject)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Class (class DecodeJson)
@@ -265,7 +265,8 @@ encodePlayerRanking player ranking =
     rankingJson = Encoders.encodeInt ranking
     
     -- Construct the Json object
-    jsonMap = FO.fromFoldable 65421      [ Tuple "playerId" playerIdJson
+    jsonMap = FO.fromFoldable 
+      [ Tuple "playerId" playerIdJson
       , Tuple "ranking" rankingJson
       ]
   in
