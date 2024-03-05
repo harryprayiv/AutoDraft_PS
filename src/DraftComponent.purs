@@ -5,9 +5,10 @@ module DraftComponent
 
 import Prelude
 
-import Affjax.Web (request) as AW
+import Affjax.RequestBody as RB
+import Affjax.ResponseFormat as RF
+import Affjax.Web (post, printError, request) as AW
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
-import Data.Argonaut (encodeJson)
 import Data.Array (elem)
 import Data.Either (Either(..))
 import Data.Map (Map)
@@ -24,7 +25,7 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Mutation (fetchPlayers, fetchRankings, filterActivePlayers, mergePlayerData, sortDisplayPlayers, toggleFilter)
 import Styles.Draft (cellStyle)
-import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, SortOption, sortOptions, transformToDisplayPlayers)
+import Types.Player (DisplayPlayer, DisplayPlayers, Player, PlayersMap(..), RankingCSV, SortOption, sortOptions, transformToDisplayPlayers, transformAndEncodeDisplayPlayers)
 import Util.DraftUtils (getPositionDisplayValue, getTeamDisplayValue, position, showAsInt)
 
 data Query a = GetState (State -> a)
@@ -97,15 +98,20 @@ handleAction = case _ of
             let newDisplayPlayers = sortDisplayPlayers defaultSort false $ transformToDisplayPlayers newPlayersMap
             H.modify_ \s -> s { allPlayers = newPlayersMap, displayPlayers = newDisplayPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
-  
+
   SubmitRanking -> do
-    state <- H.get
-    let json = transformAndEncodeDisplayPlayers state.displayPlayers
-    response <- liftAff $ post (defaultRequest { url = "/submit-ranking", body = Just (jsonBody json) })
-    case response of
-      Left err -> H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> show err
-      Right _ -> H.liftEffect $ CONSOLE.log "Ranking submitted successfully"
-    pure unit
+      state <- H.get
+      let jsonBody = transformAndEncodeDisplayPlayers state.displayPlayers
+      let requestBody = RB.Json jsonBody  -- Prepare the JSON payload
+      -- Make the POST request specifying RF.json for the response format
+      response <- liftAff $ AW.post RF.json "/submit-ranking" (Just requestBody)
+      case response of
+        Left err -> do
+          -- Use printError to convert the Error to a String
+          H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> AW.printError err
+        Right _ -> do
+          H.liftEffect $ CONSOLE.log "Ranking submitted successfully"
+      pure unit
 
   DataFetched playersMap rankings -> do
       oldState <- H.get
