@@ -3,30 +3,25 @@ module Types.Player where
 import Prelude
 
 import Affjax (Error, Request, Response)
-import Data.Argonaut (_Object, assoc, encodeJson, fromObject)
-import Data.Argonaut.Core (Json, toObject)
+import Data.Argonaut (encodeJson)
+import Data.Argonaut.Core (Json, fromNumber, toObject, fromObject)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Decode.Class (class DecodeJson)
 import Data.Argonaut.Decode.Combinators ((.:))
 import Data.Argonaut.Decode.Error (JsonDecodeError(..))
-import Data.Argonaut.Encode ((:=))
-import Data.Argonaut.Encode.Encoders (encodeArray, encodeInt, encodeString)
-import Data.Argonaut.Encode.Encoders as Encoders
-import Data.Array (mapWithIndex)
-import Data.Array as FO
+import Data.Argonaut.Encode.Encoders (encodeArray)
+import Data.Array (mapWithIndex, sort, nub)
 import Data.Either (Either(..))
-import Data.Foldable (all)
-import Data.Foldable (foldl)
+import Data.Foldable (all, foldl)
 import Data.Int (toNumber)
-import Data.List (List(..), nub, sort)
-import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..))
 import Data.String.Common (split, replace)
 import Data.String.Pattern (Replacement(..))
-import Data.Tuple (Tuple(..), fst, snd, uncurry)
+import Data.Tuple (Tuple(..), uncurry)
+import Data.Tuple as Tuple
 import Effect.Aff (Aff)
 import Foreign.Object (Object, lookup)
 import Foreign.Object as Object
@@ -242,41 +237,31 @@ transformAndEncodeDisplayPlayers players =
   let playerRankings = mapWithIndex (\index player -> encodePlayerRanking player (index + 1)) players
   in encodeJson playerRankings 
 
-validatePlayerIds :: List DisplayPlayer -> Boolean
-validatePlayerIds = all (\player -> player.playerId > 0)
+validatePlayerIds :: Array DisplayPlayer -> Boolean
+validatePlayerIds players = all (\player -> player.playerId > 0) players
 
-validateRankings :: List Int -> Boolean
+validateRankings :: Array Int -> Boolean
 validateRankings rankings =
   let sortedRankings = sort rankings
       uniqueRankings = nub sortedRankings
-  in sortedRankings == uniqueRankings && List.all (\i -> i > 0) sortedRankings
+  in sortedRankings == uniqueRankings && all (\i -> i > 0) sortedRankings
 
-encodePlayersWithRanking :: List (Tuple DisplayPlayer Int) -> Either String Json
+encodePlayersWithRanking :: Array (Tuple DisplayPlayer Int) -> Either String Json
 encodePlayersWithRanking playerRankings =
-  if validatePlayerIds (map fst playerRankings) && validateRankings (map snd playerRankings)
+  if validatePlayerIds (map Tuple.fst playerRankings) && validateRankings (map Tuple.snd playerRankings)
     then Right $ encodeArray (uncurry encodePlayerRanking) playerRankings
     else Left "Validation failed: Player IDs must be positive and rankings must be unique and sequential."
 
 encodePlayerRanking :: DisplayPlayer -> Int -> Json
-encodePlayerRanking player ranking =
+encodePlayerRanking player ranking = 
   let
     -- Create individual Json values for playerId and ranking
-    playerIdJson = Encoders.encodeInt player.playerId
-    rankingJson = Encoders.encodeInt ranking
-    
-    -- Construct the Json object
-    jsonMap = FO.fromFoldable 
-      [ Tuple "playerId" playerIdJson
-      , Tuple "ranking" rankingJson
-      ]
+    playerIdJson = fromNumber $ toNumber player.playerId
+    rankingJson = fromNumber $ toNumber ranking
+
+    -- Construct the Object Json with key-value pairs
+    playerObj = Object.empty
+                 # Object.insert "playerId" playerIdJson
+                 # Object.insert "ranking" rankingJson
   in
-  fromArray jsonMap
-
-{- 
-Step 3: Handling the Encoding Result
-When calling encodePlayersWithRanking, handle the Either result to deal with potential validation errors.
-
-case encodePlayersWithRanking playerRankingsList of
-  Right json -> -- Proceed with the JSON, e.g., sending it to the server
-  Left errorMsg -> -- Handle the error, e.g., log it or notify the user
- -}
+  fromObject playerObj
