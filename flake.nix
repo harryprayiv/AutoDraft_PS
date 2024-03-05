@@ -33,7 +33,6 @@
                     strings
                     parsing
                     affjax-web
-                    affjax-node
                     arrays
                     web-events
                     web-html
@@ -45,7 +44,6 @@
                     argonaut-codecs
                     ordered-collections
                     halogen-vdom
-                    halogen-formless
                     string-parsers
                     css
                     halogen-css
