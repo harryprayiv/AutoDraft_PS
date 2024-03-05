@@ -102,12 +102,10 @@ handleAction = case _ of
   SubmitRanking -> do
       state <- H.get
       let jsonBody = transformAndEncodeDisplayPlayers state.displayPlayers
-      let requestBody = RB.Json jsonBody  -- Prepare the JSON payload
-      -- Make the POST request specifying RF.json for the response format
+      let requestBody = RB.Json jsonBody
       response <- liftAff $ AW.post RF.json "/submit-ranking" (Just requestBody)
       case response of
         Left err -> do
-          -- Use printError to convert the Error to a String
           H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> AW.printError err
         Right _ -> do
           H.liftEffect $ CONSOLE.log "Ranking submitted successfully"
