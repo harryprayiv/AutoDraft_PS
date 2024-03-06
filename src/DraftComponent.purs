@@ -4,7 +4,7 @@ module DraftComponent
   )
   where
 
-import Prelude
+import Prelude (Unit, Void, bind, discard, map, not, pure, show, unit, ($), (<>), (==))
 
 import Affjax.RequestBody as RB
 import Affjax.ResponseFormat as RF
@@ -12,13 +12,13 @@ import Affjax.Web (post, printError, request) as AW
 import DOM.HTML.Indexed.ButtonType (ButtonType(..))
 import Data.Argonaut (jsonEmptyObject, stringify)
 import Data.Array (elem)
-import Data.Either (Either(..), hush)
+import Data.Either (Either(..))
 import Data.Argonaut.Core
 import Data.Argonaut.Encode.Class (encodeJson)
 import Data.Argonaut.Parser (jsonParser)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console as CONSOLE
@@ -106,35 +106,35 @@ handleAction = case _ of
             H.modify_ \s -> s { allPlayers = newPlayersMap, displayPlayers = newDisplayPlayers, loading = false }
             H.liftEffect $ CONSOLE.log "Data successfully initialized, merged, and sorted"
 
-  SubmitRanking -> do
-    state <- H.get
-    let jsonBody = transformAndEncodeDisplayPlayers state.displayPlayers
-    let requestBody = RB.Json jsonBody
-    response <- liftAff $ AW.post RF.json "https://httpbin.org/post" (Just requestBody)
-    case response of
-      Left err -> do
-        let errorMessage = AW.printError err
-        H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> errorMessage
-        H.modify_ \s -> s { error = Just errorMessage }
-      Right res -> do
-        let responseText = case res.body of
-                             Just json -> stringify json
-                             Nothing -> "No response body"
-        H.liftEffect $ CONSOLE.log "Ranking submitted successfully with response: " <> responseText
-        H.modify_ \s -> s { submitResponse = Just responseText }
-    pure unit
-
   -- SubmitRanking -> do
-  --     state <- H.get
-  --     let jsonBody = transformAndEncodeDisplayPlayers state.displayPlayers
-  --     let requestBody = RB.Json jsonBody
-  --     response <- liftAff $ AW.post RF.json "/submit-ranking" (Just requestBody)
-  --     case response of
-  --       Left err -> do
-  --         H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> AW.printError err
-  --       Right _ -> do
-  --         H.liftEffect $ CONSOLE.log "Ranking submitted successfully"
-  --     pure unit    
+  --   state <- H.get
+  --   let jsonBody = transformAndEncodeDisplayPlayers state.displayPlayers
+  --   let requestBody = RB.Json jsonBody
+  --   response <- liftAff $ AW.post RF.json "https://httpbin.org/post" (Just requestBody)
+  --   case response of
+  --     Left err -> do
+  --       let errorMessage = AW.printError err
+  --       H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> errorMessage
+  --       H.modify_ \s -> s { error = Just errorMessage }
+  --     Right res -> do
+  --       let responseText = case res.body of
+  --                            Just json -> stringify json
+  --                            Nothing -> "No response body"
+  --       H.liftEffect $ CONSOLE.log "Ranking submitted successfully with response: " <> responseText
+  --       H.modify_ \s -> s { submitResponse = Just responseText }
+  --   pure unit
+
+  SubmitRanking -> do
+      state <- H.get
+      let jsonBody = transformAndEncodeDisplayPlayers state.displayPlayers
+      let requestBody = RB.Json jsonBody
+      response <- liftAff $ AW.post RF.json "/submit-ranking" (Just requestBody)
+      case response of
+        Left err -> do
+          H.liftEffect $ CONSOLE.log $ "Error submitting ranking: " <> AW.printError err
+        Right _ -> do
+          H.liftEffect $ CONSOLE.log "Ranking submitted successfully"
+      pure unit    
     
   DataFetched playersMap rankings -> do
       oldState <- H.get
